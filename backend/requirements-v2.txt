@@ -1,0 +1,5 @@
+# Additional dependencies for Haven v2 pipeline
+# Install alongside the existing requirements.txt:
+#   pip install -r requirements.txt -r requirements-v2.txt
+
+httpx>=0.27.0
