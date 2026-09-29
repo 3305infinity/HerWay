@@ -4,48 +4,41 @@
 
 @layer base {
   :root {
-    /* Haven Brand Colors — warm, trustworthy, not generic AI blue */
-    --background: 30 20% 98%;
-    --foreground: 220 25% 12%;
+    /* Haven Editorial Light Palette — warm ivory, soft lavender, deep plum typography, coral accent */
+    --background: 35 25% 97%;
+    --foreground: 280 25% 14%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 25% 12%;
+    --card-foreground: 280 25% 14%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 12%;
+    --popover-foreground: 280 25% 14%;
 
-    /* Haven rose — the primary brand color (warm, not blue) */
-    --primary: 347 72% 44%;
+    /* Haven rose — primary brand accent (rich terracotta-rose) */
+    --primary: 348 70% 46%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 30 20% 94%;
-    --secondary-foreground: 220 25% 20%;
+    --secondary: 280 15% 94%;
+    --secondary-foreground: 280 25% 20%;
 
-    --muted: 30 15% 94%;
-    --muted-foreground: 220 12% 46%;
+    --muted: 280 12% 93%;
+    --muted-foreground: 280 10% 44%;
 
-    --accent: 347 30% 94%;
-    --accent-foreground: 347 72% 36%;
+    --accent: 280 25% 94%;
+    --accent-foreground: 348 70% 36%;
 
     --destructive: 0 78% 54%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 13% 88%;
-    --input: 220 13% 88%;
-    --ring: 347 72% 44%;
+    --border: 280 10% 88%;
+    --input: 280 10% 88%;
+    --ring: 348 70% 46%;
 
     --radius: 0.5rem;
 
-    /* Chart colors */
-    --chart-1: 347 72% 44%;
-    --chart-2: 142 71% 38%;
-    --chart-3: 25 95% 52%;
-    --chart-4: 220 70% 50%;
-    --chart-5: 270 60% 50%;
-
     /* Haven semantic tokens */
-    --haven-rose: 347 72% 44%;
-    --haven-rose-subtle: 347 60% 96%;
+    --haven-rose: 348 70% 46%;
+    --haven-rose-subtle: 348 60% 96%;
     --haven-safe: 142 56% 40%;
     --haven-safe-subtle: 142 56% 95%;
     --haven-caution: 32 90% 46%;
@@ -55,41 +48,37 @@
   }
 
   .dark {
-    --background: 220 22% 9%;
-    --foreground: 30 15% 92%;
+    /* Haven Editorial Dark Palette — near-black plum base, deep plum surfaces, warm off-white text, muted lavender, coral accent */
+    --background: 275 25% 7%;
+    --foreground: 30 20% 95%;
 
-    --card: 220 22% 12%;
-    --card-foreground: 30 15% 92%;
+    --card: 275 20% 10.5%;
+    --card-foreground: 30 20% 95%;
 
-    --popover: 220 22% 12%;
-    --popover-foreground: 30 15% 92%;
+    --popover: 275 20% 10.5%;
+    --popover-foreground: 30 20% 95%;
 
-    --primary: 347 65% 58%;
-    --primary-foreground: 220 22% 9%;
+    --primary: 350 72% 62%;
+    --primary-foreground: 275 25% 7%;
 
-    --secondary: 220 22% 16%;
-    --secondary-foreground: 30 15% 80%;
+    --secondary: 275 18% 15%;
+    --secondary-foreground: 30 15% 85%;
 
-    --muted: 220 22% 16%;
-    --muted-foreground: 220 12% 55%;
+    --muted: 275 18% 14%;
+    --muted-foreground: 275 12% 64%;
 
-    --accent: 347 30% 18%;
-    --accent-foreground: 347 65% 70%;
+    --accent: 275 22% 16%;
+    --accent-foreground: 350 72% 75%;
 
     --destructive: 0 62% 50%;
     --destructive-foreground: 30 15% 92%;
 
-    --border: 220 22% 20%;
-    --input: 220 22% 20%;
-    --ring: 347 65% 58%;
+    --border: 275 16% 18%;
+    --input: 275 16% 18%;
+    --ring: 350 72% 62%;
 
-    --chart-1: 347 65% 58%;
-    --chart-2: 142 60% 50%;
-    --chart-3: 25 80% 58%;
-    --chart-4: 220 70% 60%;
-    --chart-5: 270 60% 60%;
-
-    --haven-rose-subtle: 347 40% 16%;
+    --haven-rose: 350 72% 62%;
+    --haven-rose-subtle: 350 40% 16%;
     --haven-safe-subtle: 142 40% 14%;
     --haven-caution-subtle: 32 60% 16%;
     --haven-info-subtle: 220 40% 16%;

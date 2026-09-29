@@ -1,84 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
+import Image from 'next/image';
 
-// Support categories for the intake form
 const CATEGORIES = [
-  { id: 'domestic_violence', label: 'Domestic violence or abuse', group: 'safety' },
-  { id: 'stalking', label: 'Stalking or threats', group: 'safety' },
-  { id: 'online_harassment', label: 'Online harassment or cyber stalking', group: 'safety' },
-  { id: 'workplace_harassment', label: 'Workplace harassment (POSH)', group: 'safety' },
-  { id: 'safety', label: 'I feel unsafe right now', group: 'safety' },
-  { id: 'consumer', label: 'Consumer complaint', group: 'general' },
-  { id: 'housing', label: 'Housing or rental issue', group: 'general' },
-  { id: 'cyber', label: 'Financial fraud or cyber scam', group: 'general' },
-  { id: 'employment', label: 'Employment issue', group: 'general' },
-  { id: 'education', label: 'Education or college issue', group: 'general' },
-  { id: 'other', label: 'Something else', group: 'general' },
-];
-
-// Quick-start prompts (no visible labels in UI — just pre-fills the form)
-const QUICK_STARTS = [
-  {
-    id: 'safety',
-    label: "I'm feeling unsafe right now",
-    category: 'safety',
-    starter: 'I am currently feeling unsafe and need immediate emergency guidance and safety steps.',
-    urgency: 'critical',
-  },
-  {
-    id: 'domestic_violence',
-    label: 'Abuse or domestic violence',
-    category: 'domestic_violence',
-    starter: 'I am experiencing physical, verbal, or emotional abuse at home and need support resources and legal options.',
-    urgency: 'high',
-  },
-  {
-    id: 'stalking',
-    label: 'Harassment or stalking',
-    category: 'stalking',
-    starter: 'Someone is following me, sending unwanted threats, or monitoring my movements without consent.',
-    urgency: 'high',
-  },
-  {
-    id: 'online_harassment',
-    label: 'Online harassment',
-    category: 'online_harassment',
-    starter: 'I am being harassed online, non-consensual images or messages are being shared, or fake profiles were created.',
-    urgency: 'high',
-  },
-  {
-    id: 'workplace_harassment',
-    label: 'Workplace harassment',
-    category: 'workplace_harassment',
-    starter: 'I am facing sexual harassment or retaliatory threats from a supervisor or colleague at my workplace.',
-    urgency: 'high',
-  },
-  {
-    id: 'legal_information',
-    label: 'Legal information',
-    category: 'legal_information',
-    starter: 'I need clear, verified legal information regarding my rights, protective orders, or filing formal complaints.',
-    urgency: 'medium',
-  },
-  {
-    id: 'therapy_support',
-    label: 'Someone to talk to',
-    category: 'therapy_support',
-    starter: '',
-    urgency: 'medium',
-    redirect: '/therapybot',
-  },
-  {
-    id: 'something_else',
-    label: 'Something else',
-    category: 'consumer',
-    starter: '',
-    urgency: 'medium',
-  },
+  { id: 'domestic_violence', label: 'Domestic abuse & violence', group: 'safety', starter: 'I am experiencing abuse or threats at home and need support resources and legal options.' },
+  { id: 'stalking', label: 'Stalking & unwanted tracking', group: 'safety', starter: 'Someone is following me, monitoring my devices, or sending unwanted threatening messages.' },
+  { id: 'online_harassment', label: 'Online harassment & cyber threats', group: 'safety', starter: 'Someone is repeatedly harassing or threatening me through social media or private messages.' },
+  { id: 'workplace_harassment', label: 'Workplace harassment (POSH)', group: 'safety', starter: 'I am experiencing inappropriate conduct or harassment at work and want to understand my POSH rights.' },
+  { id: 'safety', label: 'I feel unsafe right now', group: 'safety', starter: 'I am currently in an unsafe situation and need immediate safety steps and emergency guidance.' },
+  { id: 'legal_information', label: 'Legal rights & information', group: 'general', starter: 'I need clear, factual legal guidance regarding my rights and legal procedures.' },
+  { id: 'housing', label: 'Housing or rental dispute', group: 'general', starter: 'My landlord is withholding my security deposit or violating tenancy agreements.' },
+  { id: 'consumer', label: 'Consumer complaint', group: 'general', starter: 'A business or seller refused to honor a warranty or provide a lawful refund.' },
+  { id: 'other', label: 'Something else', group: 'general', starter: '' },
 ];
 
 const RESEARCH_STEPS = [
@@ -94,11 +31,11 @@ const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 export default function Home() {
   const router = useRouter();
   const { user } = useUser();
+  const inputSectionRef = useRef<HTMLDivElement>(null);
 
   const [situationText, setSituationText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('domestic_violence');
   const [locationInput, setLocationInput] = useState('');
-  const [selectedPill, setSelectedPill] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState<'input' | 'understanding' | 'researching'>('input');
@@ -108,16 +45,18 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [researchError, setResearchError] = useState<boolean>(false);
 
-  const handlePillClick = (pill: (typeof QUICK_STARTS)[0]) => {
-    if (pill.redirect) {
-      router.push(pill.redirect);
-      return;
+  const scrollToInput = (catId?: string, starter?: string) => {
+    if (catId) setSelectedCategory(catId);
+    if (starter && (!situationText || situationText.trim().length < 15)) {
+      setSituationText(starter);
     }
-    setSelectedPill(pill.id);
-    setSelectedCategory(pill.category);
-    if (pill.starter && (!situationText || situationText.trim().length < 15)) {
-      setSituationText(pill.starter);
-    }
+    inputSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const textarea = document.getElementById('situation-textarea');
+    if (textarea) textarea.focus();
+  };
+
+  const handleQuickExit = () => {
+    window.location.replace('https://www.google.com');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -171,7 +110,7 @@ export default function Home() {
       }
     } catch (err: any) {
       console.error('Case creation error:', err);
-      setErrorMessage("We couldn't connect to Haven right now. Your text is saved below. Please try again.");
+      setErrorMessage("We couldn't connect to Haven right now. Your text is preserved below. Please try again.");
       setStep('input');
     } finally {
       setIsSubmitting(false);
@@ -207,348 +146,652 @@ export default function Home() {
     }
   };
 
-  return (
-    <div className="min-h-[calc(100vh-3.5rem)] bg-background flex flex-col items-center justify-center p-4 sm:p-8">
-      <div className="w-full max-w-2xl">
+  // ─────────────────────────────────────────────────────────────
+  // STEP 2: UNDERSTANDING CONFIRMATION
+  // ─────────────────────────────────────────────────────────────
+  if (step === 'understanding' && analysis) {
+    return (
+      <div className="min-h-[calc(100vh-3.5rem)] bg-background flex flex-col items-center justify-center p-4 sm:p-8">
+        <div className="w-full max-w-2xl bg-card border border-border rounded-2xl p-6 sm:p-8 space-y-6 shadow-sm">
+          <div className="space-y-2 border-b border-border/60 pb-5">
+            <span className="text-xs uppercase tracking-wider font-semibold text-primary">
+              Step 1 of 2 · Understanding Your Situation
+            </span>
+            <h1 className="font-serif text-2xl sm:text-3xl text-foreground font-normal">
+              Before we search, here is what we understood.
+            </h1>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              We extract only explicit facts so your research and safety plan are based on truth, not assumptions.
+            </p>
+          </div>
 
-        {/* ── STEP 1: Intake Form ─────────────────────────────── */}
-        {step === 'input' && (
-          <div className="haven-fadein space-y-8">
-
-            {/* Hero */}
-            <div className="space-y-3 text-center">
-              <h1 className="text-4xl sm:text-5xl font-bold text-foreground tracking-tight">
-                Haven
-              </h1>
-              <p className="text-lg sm:text-xl text-muted-foreground font-light leading-relaxed max-w-md mx-auto">
-                A safe place to figure out what comes next.
-              </p>
+          <div className="space-y-4 text-sm leading-relaxed">
+            <div className="p-4 rounded-xl bg-muted/40 border border-border/60 space-y-1.5">
+              <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Summary</span>
+              <p className="text-foreground">{analysis.case_summary || situationText}</p>
             </div>
 
-            {/* Error banner if network/server issue occurred */}
-            {errorMessage && (
-              <div
-                className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-center justify-between gap-3"
-                role="alert"
-              >
-                <span>{errorMessage}</span>
-                <button
-                  type="button"
-                  suppressHydrationWarning
-                  onClick={() => setErrorMessage(null)}
-                  className="p-1 rounded hover:bg-destructive/20 text-xs font-semibold"
-                  aria-label="Dismiss error"
-                >
-                  ✕
-                </button>
+            {analysis.known_facts && analysis.known_facts.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Established Facts
+                </span>
+                <ul className="space-y-1.5 pl-4 list-disc text-muted-foreground">
+                  {analysis.known_facts.map((fact: string, idx: number) => (
+                    <li key={idx} className="text-foreground/90">{fact}</li>
+                  ))}
+                </ul>
               </div>
             )}
+          </div>
 
-            {/* Quick-start options */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground text-center">
-                What brings you here?
+          <div className="pt-4 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setStep('input')}
+              className="text-xs text-muted-foreground hover:text-foreground order-2 sm:order-1 transition-colors"
+            >
+              ← Edit your situation text
+            </button>
+            <button
+              type="button"
+              onClick={startResearch}
+              className="w-full sm:w-auto px-6 py-3 bg-primary text-primary-foreground font-medium rounded-xl hover:bg-primary/90 transition-colors shadow-sm order-1 sm:order-2"
+            >
+              Begin verified research →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // STEP 3: RESEARCH PROGRESS
+  // ─────────────────────────────────────────────────────────────
+  if (step === 'researching') {
+    return (
+      <div className="min-h-[calc(100vh-3.5rem)] bg-background flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-lg bg-card border border-border rounded-2xl p-8 space-y-8 shadow-sm">
+          {!researchError ? (
+            <>
+              <div className="space-y-2 text-center">
+                <span className="text-xs uppercase tracking-wider font-semibold text-primary">
+                  Step 2 of 2 · Live Research & Verification
+                </span>
+                <h1 className="font-serif text-2xl sm:text-3xl text-foreground font-normal">
+                  Haven is researching your case.
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Checking official statutes, crisis helplines, and nearby centres.
+                </p>
+              </div>
+
+              <div className="space-y-4 py-2">
+                {RESEARCH_STEPS.map((stepText, idx) => {
+                  const isDone = idx < currentStepIndex;
+                  const isCurrent = idx === currentStepIndex;
+                  return (
+                    <div key={idx} className="flex items-center gap-3 text-sm">
+                      <div
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 transition-all ${
+                          isDone
+                            ? 'bg-emerald-500 text-white'
+                            : isCurrent
+                            ? 'bg-primary text-primary-foreground animate-pulse'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {isDone ? '✓' : idx + 1}
+                      </div>
+                      <span
+                        className={`transition-colors ${
+                          isDone
+                            ? 'text-muted-foreground line-through'
+                            : isCurrent
+                            ? 'text-foreground font-medium'
+                            : 'text-muted-foreground/60'
+                        }`}
+                      >
+                        {stepText}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="text-xs text-center text-muted-foreground border-t border-border/60 pt-4">
+                This takes approximately 10 to 15 seconds. Please do not close your browser.
               </p>
-              <div className="flex flex-wrap justify-center gap-2">
-                {QUICK_STARTS.map((pill) => (
+            </>
+          ) : (
+            <div className="space-y-6 text-center">
+              <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto text-xl">
+                ⚠
+              </div>
+              <div className="space-y-2">
+                <h1 className="text-xl font-semibold text-foreground">Live research paused</h1>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  We couldn&apos;t complete live web research right now. Your situation and case memory are completely safe.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  type="button"
+                  onClick={startResearch}
+                  className="px-5 py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:bg-primary/90 transition-colors"
+                >
+                  Try research again
+                </button>
+                {caseId && (
                   <button
-                    key={pill.id}
                     type="button"
-                    suppressHydrationWarning
-                    onClick={() => handlePillClick(pill)}
-                    aria-pressed={selectedPill === pill.id}
-                    className={`px-3.5 py-2 rounded-lg text-sm transition-colors border ${
-                      selectedPill === pill.id
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background border-border text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-muted/30'
-                    }`}
+                    onClick={() => router.push(`/cases/${caseId}`)}
+                    className="px-5 py-2.5 border border-border text-foreground text-sm font-medium rounded-xl hover:bg-muted transition-colors"
                   >
-                    {pill.label}
+                    Open case workspace
                   </button>
-                ))}
+                )}
               </div>
             </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
-            {/* Form */}
-            <form
-              onSubmit={handleSubmit}
-              className="space-y-5 bg-card border border-border rounded-xl p-6 sm:p-8 shadow-sm"
-            >
-              {/* Situation textarea */}
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="situation"
-                  className="text-sm font-medium text-foreground flex items-center justify-between"
-                >
-                  <span>Describe what happened</span>
-                  <span className="text-xs text-muted-foreground font-normal">Confidential</span>
-                </label>
-                <textarea
-                  id="situation"
-                  suppressHydrationWarning
-                  value={situationText}
-                  onChange={(e) => setSituationText(e.target.value)}
-                  placeholder="Share what's happening. Include what you need help with — Haven will find verified resources and next steps for your situation."
-                  rows={5}
-                  required
-                  minLength={10}
-                  aria-required="true"
-                  className="w-full p-4 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors leading-relaxed resize-none"
-                />
-              </div>
+  // ─────────────────────────────────────────────────────────────
+  // STEP 1: PREMIUM EDITORIAL HOMEPAGE
+  // ─────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-background text-foreground flex flex-col selection:bg-primary/20">
 
-              {/* Location + Category row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label htmlFor="location" className="text-sm font-medium text-foreground">
-                    Location
-                    <span className="ml-1 text-xs text-muted-foreground font-normal">(for nearby resources)</span>
-                  </label>
-                  <input
-                    id="location"
-                    type="text"
-                    suppressHydrationWarning
-                    value={locationInput}
-                    onChange={(e) => setLocationInput(e.target.value)}
-                    placeholder="e.g. New Delhi, Mumbai"
-                    className="w-full px-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
+      {/* ── Urgent Help Bar (Discrete, Not Aggressive) ────────── */}
+      <aside
+        className="w-full border-b border-border/80 bg-muted/40 py-2.5 px-4 sm:px-8"
+        aria-label="Immediate Emergency Help"
+      >
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-primary shrink-0" aria-hidden="true" />
+            <span className="font-medium text-foreground">In immediate danger?</span>
+            <span>Emergency helplines are available 24/7 across India & international lines:</span>
+          </div>
+          <div className="flex items-center gap-4 flex-wrap font-mono text-[11px] font-semibold text-foreground">
+            <a href="tel:112" className="hover:text-primary transition-colors underline-offset-4 hover:underline">
+              112 (National Emergency)
+            </a>
+            <span aria-hidden="true" className="opacity-40">·</span>
+            <a href="tel:181" className="hover:text-primary transition-colors underline-offset-4 hover:underline">
+              181 (Women Helpline)
+            </a>
+            <span aria-hidden="true" className="opacity-40">·</span>
+            <a href="tel:1091" className="hover:text-primary transition-colors underline-offset-4 hover:underline">
+              1091 (Women Police)
+            </a>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── HERO SECTION: Editorial Asymmetry ────────────────── */}
+      <section className="relative px-4 sm:px-8 pt-10 sm:pt-16 pb-16 sm:pb-24 border-b border-border/60">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
+
+          {/* Left Column: Editorial Headline & Restrained Copy (7 cols) */}
+          <div className="lg:col-span-7 space-y-6 sm:space-y-8">
+            <div className="space-y-3">
+              <span className="inline-block text-[11px] tracking-[0.2em] font-medium text-primary uppercase">
+                Haven · Women&apos;s Safety &amp; Resource Intelligence
+              </span>
+
+              <h1 className="font-serif text-4xl sm:text-6xl lg:text-[4.25rem] font-normal leading-[1.08] tracking-tight text-foreground">
+                You don&apos;t have to figure it out{' '}
+                <span className="italic font-normal text-primary">alone.</span>
+              </h1>
+            </div>
+
+            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-xl font-normal">
+              When something doesn&apos;t feel right, Haven helps you understand what is happening,
+              find trustworthy current resources, and figure out safer next steps.
+            </p>
+
+            {/* Hero CTAs */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => scrollToInput()}
+                className="px-6 py-3.5 bg-primary text-primary-foreground font-medium text-sm rounded-xl hover:bg-primary/90 transition-all shadow-sm flex items-center justify-center gap-2 group"
+              >
+                <span>Tell Haven what happened</span>
+                <span className="transition-transform group-hover:translate-y-0.5">↓</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('editorial-support');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="px-5 py-3.5 border border-border/80 text-foreground font-medium text-sm rounded-xl hover:bg-muted/60 transition-colors flex items-center justify-center"
+              >
+                Explore support options →
+              </button>
+            </div>
+
+            {/* Quick Safety Trust Notes */}
+            <div className="pt-2 flex items-center gap-6 text-xs text-muted-foreground flex-wrap">
+              <span className="flex items-center gap-1.5">
+                <span className="text-emerald-500 font-bold">✓</span> Confidential &amp; private
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-emerald-500 font-bold">✓</span> Official government &amp; NGO registries
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-emerald-500 font-bold">✓</span> No unverified advice
+              </span>
+            </div>
+          </div>
+
+          {/* Right Column: Fine Art Editorial Illustration (5 cols) */}
+          <div className="lg:col-span-5 flex justify-center lg:justify-end">
+            <div className="relative w-full max-w-md">
+              {/* Archival border & soft shadow frame */}
+              <div className="relative rounded-2xl overflow-hidden border border-border/80 bg-card shadow-lg p-2.5 transition-transform hover:scale-[1.01] duration-500">
+                <div className="relative aspect-[4/3] sm:aspect-[3/4] w-full rounded-xl overflow-hidden bg-muted/40">
+                  <Image
+                    src="/images/haven-hero.jpg"
+                    alt="Editorial fine-art illustration representing a woman of calm strength, quiet resilience, and dignity"
+                    fill
+                    priority
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 45vw, 480px"
+                    className="object-cover object-center"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label htmlFor="category" className="text-sm font-medium text-foreground">
-                    Category
-                  </label>
-                  <select
-                    id="category"
-                    suppressHydrationWarning
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors cursor-pointer"
-                  >
-                    <optgroup label="Safety & Support">
-                      {CATEGORIES.filter((c) => c.group === 'safety').map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Other Situations">
-                      {CATEGORIES.filter((c) => c.group === 'general').map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
+                <div className="pt-3 px-2 pb-1 text-center">
+                  <p className="font-serif italic text-xs text-muted-foreground leading-normal">
+                    &ldquo;A safe, judgment-free space to find your footing and know your rights.&rdquo;
+                  </p>
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* Submit */}
+        </div>
+      </section>
+
+      {/* ── SECTION: "You Can Come Here With Anything" ───────── */}
+      <section className="px-4 sm:px-8 py-14 sm:py-20 border-b border-border/60 bg-muted/20">
+        <div className="max-w-5xl mx-auto space-y-8">
+          <div className="space-y-2">
+            <span className="text-xs uppercase tracking-wider font-semibold text-primary">
+              Where to start
+            </span>
+            <h2 className="font-serif text-2xl sm:text-4xl text-foreground font-normal tracking-tight">
+              Some problems are difficult to explain.
+            </h2>
+            <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
+              Whether it started with a single uncomfortable interaction or years of quiet control,
+              Haven meets you where you are. Select a context or write freely below.
+            </p>
+          </div>
+
+          {/* Asymmetric Interactive Category Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+            {CATEGORIES.slice(0, 8).map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => scrollToInput(cat.id, cat.starter)}
+                className={`text-left p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 group ${
+                  selectedCategory === cat.id
+                    ? 'border-primary bg-primary/8 text-foreground'
+                    : 'border-border/80 bg-card hover:border-primary/50 text-foreground'
+                }`}
+              >
+                <div className="space-y-1">
+                  <h3 className="text-sm font-medium leading-snug group-hover:text-primary transition-colors">
+                    {cat.label}
+                  </h3>
+                  <span className="text-[11px] text-muted-foreground capitalize">
+                    {cat.group === 'safety' ? 'Safety priority' : 'Information & options'}
+                  </span>
+                </div>
+                <span className="text-xs text-primary font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Begin here →
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── PRIMARY PRODUCT ACTION: What Happened? ───────────── */}
+      <section
+        id="tell-haven"
+        ref={inputSectionRef}
+        className="px-4 sm:px-8 py-16 sm:py-24 border-b border-border/60 scroll-mt-14"
+      >
+        <div className="max-w-3xl mx-auto space-y-8">
+          <div className="space-y-2 text-center sm:text-left">
+            <span className="text-xs uppercase tracking-wider font-semibold text-primary">
+              Interactive Intake
+            </span>
+            <h2 className="font-serif text-3xl sm:text-4xl text-foreground font-normal tracking-tight">
+              What happened?
+            </h2>
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+              Describe your situation in your own words. We will analyze the facts, search verified
+              resources, and build your personalized next steps.
+            </p>
+          </div>
+
+          {errorMessage && (
+            <div className="p-4 rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-800 dark:text-rose-300 text-sm">
+              {errorMessage}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Category selection */}
+            <div className="space-y-1.5">
+              <label htmlFor="category-select" className="text-xs font-medium text-muted-foreground">
+                Category
+              </label>
+              <select
+                id="category-select"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-input bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors cursor-pointer"
+              >
+                {CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Main Situation Input */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label htmlFor="situation-textarea" className="text-xs font-medium text-muted-foreground">
+                  Your situation description
+                </label>
+                <span className="text-[11px] text-muted-foreground">
+                  {situationText.length} characters (minimum 10)
+                </span>
+              </div>
+              <textarea
+                id="situation-textarea"
+                rows={6}
+                value={situationText}
+                onChange={(e) => setSituationText(e.target.value)}
+                placeholder="Tell Haven what you're dealing with..."
+                className="w-full p-4 rounded-xl border border-input bg-card text-foreground text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all leading-relaxed custom-scrollbar resize-y"
+              />
+            </div>
+
+            {/* Location input */}
+            <div className="space-y-1.5">
+              <label htmlFor="location-input" className="text-xs font-medium text-muted-foreground">
+                Location (optional — helps discover nearby emergency shelters, crisis desks, and One Stop Centres)
+              </label>
+              <input
+                id="location-input"
+                type="text"
+                value={locationInput}
+                onChange={(e) => setLocationInput(e.target.value)}
+                placeholder="e.g. Austin, TX or New Delhi or Manchester"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-input bg-card text-foreground text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
+              />
+            </div>
+
+            {/* Actions & Privacy Guarantee */}
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p className="text-xs text-muted-foreground text-center sm:text-left leading-relaxed">
+                🔒 <strong>Privacy:</strong> We don&apos;t log personal identifiers or share your situation.
+              </p>
+
               <button
                 type="submit"
-                suppressHydrationWarning
                 disabled={isSubmitting || situationText.trim().length < 10}
-                className="w-full py-3.5 bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-primary-foreground font-semibold text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
-                aria-busy={isSubmitting}
+                className="w-full sm:w-auto px-8 py-3.5 bg-primary hover:bg-primary/90 disabled:opacity-40 text-primary-foreground font-medium text-sm rounded-xl transition-all shadow-sm whitespace-nowrap"
               >
-                {isSubmitting ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" aria-hidden="true" />
-                    <span>Analyzing your situation…</span>
-                  </>
-                ) : (
-                  'Tell Haven what happened'
-                )}
+                {isSubmitting ? 'Understanding what happened…' : 'Continue to situation analysis →'}
               </button>
-            </form>
-
-            {/* Secondary links */}
-            <div className="flex flex-wrap justify-center items-center gap-6 text-sm text-muted-foreground">
-              <Link href="/lawbot" className="hover:text-foreground transition-colors">
-                Legal questions
-              </Link>
-              <span className="text-border" aria-hidden="true">·</span>
-              <Link href="/therapybot" className="hover:text-foreground transition-colors">
-                Talk to Haven
-              </Link>
-              <span className="text-border" aria-hidden="true">·</span>
-              <Link href="/create-post" className="hover:text-foreground transition-colors">
-                Community
-              </Link>
             </div>
+          </form>
+        </div>
+      </section>
+
+      {/* ── STORYTELLING: From Confusion to a Clearer Next Step ─ */}
+      <section className="px-4 sm:px-8 py-16 sm:py-24 border-b border-border/60 bg-muted/15">
+        <div className="max-w-5xl mx-auto space-y-12">
+          <div className="space-y-3">
+            <span className="text-xs uppercase tracking-wider font-semibold text-primary">
+              The Process
+            </span>
+            <h2 className="font-serif text-3xl sm:text-4xl text-foreground font-normal tracking-tight">
+              From confusion to a clearer next step.
+            </h2>
+            <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
+              When trauma or safety risks are present, generic advice is dangerous. Haven runs a
+              disciplined, verifiable sequence.
+            </p>
           </div>
-        )}
 
-        {/* ── STEP 2: Haven's understanding ───────────────────── */}
-        {step === 'understanding' && (
-          <div className="haven-fadein space-y-6">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" aria-hidden="true" />
-                <span>Situation understood</span>
-              </div>
-              <h2 className="text-2xl font-semibold text-foreground">
-                Here's what Haven understood
-              </h2>
-            </div>
-
-            {analysis ? (
-              <div className="bg-card border border-border rounded-xl p-6 space-y-5 shadow-sm">
-                {/* Case summary */}
-                <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Summary
-                  </p>
-                  <p className="text-sm text-foreground leading-relaxed">
-                    {analysis.case_summary || situationText}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                  {/* Known facts */}
-                  {(analysis.known_facts || []).length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
-                        What we know
-                      </p>
-                      <ul className="space-y-1">
-                        {(analysis.known_facts || []).slice(0, 4).map((fact: string, idx: number) => (
-                          <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
-                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
-                            {fact}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Questions */}
-                  {(analysis.missing_information || analysis.questions_to_ask || []).length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-amber-700 dark:text-amber-400 uppercase tracking-wider">
-                        Haven may ask
-                      </p>
-                      <ul className="space-y-1">
-                        {(analysis.missing_information || analysis.questions_to_ask || []).slice(0, 3).map((q: string, idx: number) => (
-                          <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
-                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" aria-hidden="true" />
-                            {q}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between gap-4 pt-3 border-t border-border">
-                  <button
-                    type="button"
-                    suppressHydrationWarning
-                    onClick={() => setStep('input')}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    ← Edit
-                  </button>
-                  <button
-                    type="button"
-                    suppressHydrationWarning
-                    onClick={startResearch}
-                    className="px-6 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm rounded-lg shadow-sm transition-colors flex items-center gap-2"
-                  >
-                    Find support & resources →
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-card border border-border rounded-xl p-8 text-center">
-                <div className="flex justify-center mb-3">
-                  <span className="w-5 h-5 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin" aria-hidden="true" />
-                </div>
-                <p className="text-sm text-muted-foreground">Understanding your situation…</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── STEP 3: Researching ──────────────────────────────── */}
-        {step === 'researching' && (
-          <div className="haven-fadein space-y-6 max-w-md mx-auto text-center">
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold text-foreground">
-                Finding resources for you
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Haven is searching verified sources, helplines, and support centres.
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="space-y-3 border-t border-border/80 pt-4">
+              <span className="font-mono text-xs font-semibold text-primary">01</span>
+              <h3 className="font-serif text-lg text-foreground font-normal">Tell us what happened</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                Speak freely in plain words without needing legal terminology. Haven separates objective
+                facts from uncertainties.
               </p>
             </div>
 
-            {researchError ? (
-              <div className="bg-card border border-border rounded-xl p-6 text-center space-y-4 shadow-sm" role="alert">
-                <p className="text-sm text-foreground leading-relaxed">
-                  We couldn&apos;t complete the live research right now. Your saved case is safe.
-                </p>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                  <button
-                    type="button"
-                    suppressHydrationWarning
-                    onClick={startResearch}
-                    className="w-full sm:w-auto px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-lg transition-colors"
-                  >
-                    Try research again
-                  </button>
-                  <button
-                    type="button"
-                    suppressHydrationWarning
-                    onClick={() => router.push(`/cases/${caseId}`)}
-                    className="w-full sm:w-auto px-5 py-2.5 bg-secondary hover:bg-secondary/80 text-secondary-foreground text-sm font-medium rounded-lg transition-colors border border-border"
-                  >
-                    Open case workspace →
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Visual pulse indicator */}
-                <div className="flex justify-center py-2" aria-hidden="true">
-                  <span className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
-                </div>
+            <div className="space-y-3 border-t border-border/80 pt-4">
+              <span className="font-mono text-xs font-semibold text-primary">02</span>
+              <h3 className="font-serif text-lg text-foreground font-normal">Live, targeted research</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                We query current statutes (PWDVA, POSH, IPC/BNS), national portals, and physical crisis
+                desks specific to your location.
+              </p>
+            </div>
 
-                {/* Step list — shows current real stage */}
-                <div className="text-left space-y-2.5 bg-card border border-border rounded-xl p-4 shadow-sm" aria-live="polite">
-                  {RESEARCH_STEPS.map((label, idx) => (
-                    <div
-                      key={idx}
-                      className={`flex items-center gap-2.5 text-sm transition-colors ${
-                        idx < currentStepIndex
-                          ? 'text-muted-foreground'
-                          : idx === currentStepIndex
-                          ? 'text-foreground font-medium'
-                          : 'text-muted-foreground/40'
-                      }`}
-                    >
-                      {idx < currentStepIndex ? (
-                        <span className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0" aria-hidden="true">
-                          <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                            <path d="M1.5 4L3 5.5L6.5 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </span>
-                      ) : idx === currentStepIndex ? (
-                        <span className="w-4 h-4 rounded-full border-2 border-primary flex items-center justify-center shrink-0" aria-hidden="true">
-                          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                        </span>
-                      ) : (
-                        <span className="w-4 h-4 rounded-full border-2 border-border shrink-0" aria-hidden="true" />
-                      )}
-                      <span>{label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="space-y-3 border-t border-border/80 pt-4">
+              <span className="font-mono text-xs font-semibold text-primary">03</span>
+              <h3 className="font-serif text-lg text-foreground font-normal">Every source verified</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                We do not hallucinate phone numbers or opening hours. Every contact is checked against
+                official government and NGO registries.
+              </p>
+            </div>
+
+            <div className="space-y-3 border-t border-border/80 pt-4">
+              <span className="font-mono text-xs font-semibold text-primary">04</span>
+              <h3 className="font-serif text-lg text-foreground font-normal">Actionable safety plan</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                Receive practical steps organized by urgency: right now, next 24 hours, evidence
+                preservation, and ongoing follow-up.
+              </p>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      </section>
+
+      {/* ── RESEARCH VISUALIZATION: Trust & Verification ─────── */}
+      <section className="px-4 sm:px-8 py-16 sm:py-24 border-b border-border/60">
+        <div className="max-w-5xl mx-auto space-y-10">
+          <div className="space-y-2">
+            <span className="text-xs uppercase tracking-wider font-semibold text-primary">
+              Resource Trust
+            </span>
+            <h2 className="font-serif text-3xl sm:text-4xl text-foreground font-normal tracking-tight">
+              Current information, not yesterday&apos;s answer.
+            </h2>
+            <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
+              Legal procedures, emergency hotlines, and shelter availability change. Haven queries live
+              search channels rather than relying on memorized LLM data.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-5 rounded-2xl border border-border/80 bg-card space-y-2">
+              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded">
+                Official Sources
+              </span>
+              <h3 className="text-sm font-semibold text-foreground">Government &amp; Statutory Registries</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Direct statutory provisions from PWDVA 2005, POSH Act 2013, NCW, and Sakhi One Stop Centres.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-2xl border border-border/80 bg-card space-y-2">
+              <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded">
+                Local Resources
+              </span>
+              <h3 className="text-sm font-semibold text-foreground">Verified Nearby Locations</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Structured addresses, operating hours, and retrieved phone numbers for physical women&apos;s desks.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-2xl border border-border/80 bg-card space-y-2">
+              <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded">
+                Evidence Guidance
+              </span>
+              <h3 className="text-sm font-semibold text-foreground">Safe Documentation</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Clear protocols for capturing screenshots and timestamps only when your devices are secure.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-2xl border border-border/80 bg-card space-y-2">
+              <span className="text-xs font-semibold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded">
+                Dynamic Adaptation
+              </span>
+              <h3 className="text-sm font-semibold text-foreground">Living Safety Plans</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                If your situation changes or escalates, return anytime to update Haven and adapt your plan.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── ORIGINAL HAVEN FEATURES (Secondary & Clean) ───────── */}
+      <section id="editorial-support" className="px-4 sm:px-8 py-16 sm:py-24 border-b border-border/60 bg-muted/15">
+        <div className="max-w-5xl mx-auto space-y-8">
+          <div className="space-y-2">
+            <span className="text-xs uppercase tracking-wider font-semibold text-primary">
+              Additional Support
+            </span>
+            <h2 className="font-serif text-2xl sm:text-3xl text-foreground font-normal tracking-tight">
+              Other ways Haven can support you today.
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Link
+              href="/lawbot"
+              className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 transition-colors space-y-2 group"
+            >
+              <span className="text-xs text-muted-foreground">Need legal information?</span>
+              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center justify-between">
+                <span>LawBot</span>
+                <span>→</span>
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Explore legal acts, protection orders, and legal aid rights.
+              </p>
+            </Link>
+
+            <Link
+              href="/therapybot"
+              className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 transition-colors space-y-2 group"
+            >
+              <span className="text-xs text-muted-foreground">Need someone to talk to?</span>
+              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center justify-between">
+                <span>Talk to Haven</span>
+                <span>→</span>
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                A calm, trauma-informed supportive companion with voice support.
+              </p>
+            </Link>
+
+            <Link
+              href="/community"
+              className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 transition-colors space-y-2 group"
+            >
+              <span className="text-xs text-muted-foreground">Want to connect?</span>
+              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center justify-between">
+                <span>Community</span>
+                <span>→</span>
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Read anonymous shared experiences and peer encouragement.
+              </p>
+            </Link>
+
+            <Link
+              href="/cases"
+              className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 transition-colors space-y-2 group"
+            >
+              <span className="text-xs text-muted-foreground">Saved plans?</span>
+              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center justify-between">
+                <span>My Cases</span>
+                <span>→</span>
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Access your ongoing safety plans, actions, and research trails.
+              </p>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ── EDITORIAL FOOTER ─────────────────────────────────── */}
+      <footer className="px-4 sm:px-8 py-12 bg-background border-t border-border/80">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-8 text-xs text-muted-foreground">
+          <div className="space-y-1.5 max-w-sm">
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center">
+                H
+              </span>
+              <span className="font-semibold text-sm text-foreground">Haven</span>
+            </div>
+            <p className="text-muted-foreground leading-relaxed">
+              A private, trauma-informed intelligence platform helping women navigate difficult situations with verified facts and safety plans.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-6 flex-wrap">
+            <Link href="/cases" className="hover:text-foreground transition-colors">
+              My Cases
+            </Link>
+            <Link href="/lawbot" className="hover:text-foreground transition-colors">
+              LawBot
+            </Link>
+            <Link href="/therapybot" className="hover:text-foreground transition-colors">
+              Talk to Haven
+            </Link>
+            <Link href="/community" className="hover:text-foreground transition-colors">
+              Community
+            </Link>
+            <button
+              type="button"
+              onClick={handleQuickExit}
+              className="px-3 py-1 bg-primary text-primary-foreground rounded-md font-semibold text-[11px] hover:bg-primary/90 transition-colors"
+            >
+              Quick Exit (ESC)
+            </button>
+          </div>
+        </div>
+      </footer>
+
     </div>
   );
 }

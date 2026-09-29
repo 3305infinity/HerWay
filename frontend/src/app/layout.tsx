@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { Inter } from 'next/font/google';
+import { Inter, Playfair_Display } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
 import Navbar from '@/components/Navbar';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -18,6 +18,12 @@ const inter = Inter({
   display: 'swap',
 });
 
+const playfair = Playfair_Display({
+  subsets: ['latin'],
+  variable: '--font-serif',
+  display: 'swap',
+});
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,12 +33,12 @@ export default function RootLayout({
     <ClerkProvider dynamic>
       <html lang="en" suppressHydrationWarning>
         <body
-          className={`${inter.variable} font-sans antialiased`}
+          className={`${inter.variable} ${playfair.variable} font-sans antialiased`}
           suppressHydrationWarning
         >
           <ThemeProvider
             attribute="class"
-            defaultTheme="system"
+            defaultTheme="dark"
             enableSystem
             disableTransitionOnChange
           >

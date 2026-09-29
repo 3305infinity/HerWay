@@ -121,9 +121,12 @@ class Case(BaseModel):
         json_encoders = {datetime: lambda v: v.isoformat()}
 
 
+_indexes_created = False
+
 def ensure_case_indexes(db: Any) -> None:
     """Ensure indexes on 'user_id', 'status', and 'updated_at' for fast querying."""
-    if db is None:
+    global _indexes_created
+    if _indexes_created or db is None:
         return
     try:
         col = db["cases"]
@@ -131,6 +134,7 @@ def ensure_case_indexes(db: Any) -> None:
         col.create_index([("status", 1)])
         col.create_index([("updated_at", -1)])
         col.create_index([("user_id", 1), ("status", 1), ("updated_at", -1)])
+        _indexes_created = True
     except Exception:
         pass
 

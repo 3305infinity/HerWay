@@ -13,6 +13,8 @@ const config = {
     extend: {
       fontFamily: {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        serif: ['var(--font-serif)', 'Playfair Display', 'Georgia', 'serif'],
+        display: ['var(--font-serif)', 'Playfair Display', 'Georgia', 'serif'],
       },
       colors: {
         border: 'hsl(var(--border))',
