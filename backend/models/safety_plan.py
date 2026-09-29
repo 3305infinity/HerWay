@@ -150,7 +150,7 @@ class SafetyPlan(BaseModel):
     
     disclaimer: str = Field(
         default=(
-            "Haven Safety Plan is an information and crisis navigation tool. "
+            "HerWay Safety Plan is an information and crisis navigation tool. "
             "If you are in immediate physical danger, please contact your local emergency services (112 / 1091 / 911) "
             "or move to a safe, public location immediately."
         )

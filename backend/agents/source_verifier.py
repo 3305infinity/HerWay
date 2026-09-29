@@ -58,7 +58,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _VERIFIER_SYSTEM_PROMPT = """\
-You are the Source Verification & Evidence Agent for Haven.
+You are the Source Verification & Evidence Agent for HerWay.
 
 Input:
 - A structured Situation object.

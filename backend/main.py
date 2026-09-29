@@ -52,7 +52,7 @@ logger.addHandler(handler)
 # Application
 # ---------------------------------------------------------------------------
 app = FastAPI(
-    title="Haven",
+    title="HerWay",
     description="Information and action-planning assistant for real-world problems",
     version="2.0.0",
 )

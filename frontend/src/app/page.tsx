@@ -110,7 +110,7 @@ export default function Home() {
       }
     } catch (err: any) {
       console.error('Case creation error:', err);
-      setErrorMessage("We couldn't connect to Haven right now. Your text is preserved below. Please try again.");
+      setErrorMessage("We couldn't connect to HerWay right now. Your text is preserved below. Please try again.");
       setStep('input');
     } finally {
       setIsSubmitting(false);
@@ -220,7 +220,7 @@ export default function Home() {
                   Step 2 of 2 · Live Research & Verification
                 </span>
                 <h1 className="font-serif text-2xl sm:text-3xl text-foreground font-normal">
-                  Haven is researching your case.
+                  HerWay is researching your case.
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   Checking official statutes, crisis helplines, and nearby centres.
@@ -341,7 +341,7 @@ export default function Home() {
           <div className="lg:col-span-7 space-y-6 sm:space-y-8">
             <div className="space-y-3">
               <span className="inline-block text-[11px] tracking-[0.2em] font-medium text-primary uppercase">
-                Haven · Women&apos;s Safety &amp; Resource Intelligence
+                HerWay · Women&apos;s Safety &amp; Resource Intelligence
               </span>
 
               <h1 className="font-serif text-4xl sm:text-6xl lg:text-[4.25rem] font-normal leading-[1.08] tracking-tight text-foreground">
@@ -351,7 +351,7 @@ export default function Home() {
             </div>
 
             <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-xl font-normal">
-              When something doesn&apos;t feel right, Haven helps you understand what is happening,
+              When something doesn&apos;t feel right, HerWay helps you understand what is happening,
               find trustworthy current resources, and figure out safer next steps.
             </p>
 
@@ -362,7 +362,7 @@ export default function Home() {
                 onClick={() => scrollToInput()}
                 className="px-6 py-3.5 bg-primary text-primary-foreground font-medium text-sm rounded-xl hover:bg-primary/90 transition-all shadow-sm flex items-center justify-center gap-2 group"
               >
-                <span>Tell Haven what happened</span>
+                <span>Tell HerWay what happened</span>
                 <span className="transition-transform group-hover:translate-y-0.5">↓</span>
               </button>
 
@@ -432,7 +432,7 @@ export default function Home() {
             </h2>
             <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
               Whether it started with a single uncomfortable interaction or years of quiet control,
-              Haven meets you where you are. Select a context or write freely below.
+              HerWay meets you where you are. Select a context or write freely below.
             </p>
           </div>
 
@@ -468,7 +468,7 @@ export default function Home() {
 
       {/* ── PRIMARY PRODUCT ACTION: What Happened? ───────────── */}
       <section
-        id="tell-haven"
+        id="tell-herway"
         ref={inputSectionRef}
         className="px-4 sm:px-8 py-16 sm:py-24 border-b border-border/60 scroll-mt-14"
       >
@@ -527,7 +527,7 @@ export default function Home() {
                 rows={6}
                 value={situationText}
                 onChange={(e) => setSituationText(e.target.value)}
-                placeholder="Tell Haven what you're dealing with..."
+                placeholder="Tell HerWay what you're dealing with..."
                 className="w-full p-4 rounded-xl border border-input bg-card text-foreground text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all leading-relaxed custom-scrollbar resize-y"
               />
             </div>
@@ -576,7 +576,7 @@ export default function Home() {
               From confusion to a clearer next step.
             </h2>
             <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
-              When trauma or safety risks are present, generic advice is dangerous. Haven runs a
+              When trauma or safety risks are present, generic advice is dangerous. HerWay runs a
               disciplined, verifiable sequence.
             </p>
           </div>
@@ -586,7 +586,7 @@ export default function Home() {
               <span className="font-mono text-xs font-semibold text-primary">01</span>
               <h3 className="font-serif text-lg text-foreground font-normal">Tell us what happened</h3>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                Speak freely in plain words without needing legal terminology. Haven separates objective
+                Speak freely in plain words without needing legal terminology. HerWay separates objective
                 facts from uncertainties.
               </p>
             </div>
@@ -632,7 +632,7 @@ export default function Home() {
               Current information, not yesterday&apos;s answer.
             </h2>
             <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
-              Legal procedures, emergency hotlines, and shelter availability change. Haven queries live
+              Legal procedures, emergency hotlines, and shelter availability change. HerWay queries live
               search channels rather than relying on memorized LLM data.
             </p>
           </div>
@@ -674,14 +674,14 @@ export default function Home() {
               </span>
               <h3 className="text-sm font-semibold text-foreground">Living Safety Plans</h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                If your situation changes or escalates, return anytime to update Haven and adapt your plan.
+                If your situation changes or escalates, return anytime to update HerWay and adapt your plan.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── ORIGINAL HAVEN FEATURES (Secondary & Clean) ───────── */}
+      {/* ── ORIGINAL HERWAY FEATURES (Secondary & Clean) ───────── */}
       <section id="editorial-support" className="px-4 sm:px-8 py-16 sm:py-24 border-b border-border/60 bg-muted/15">
         <div className="max-w-5xl mx-auto space-y-8">
           <div className="space-y-2">
@@ -689,7 +689,7 @@ export default function Home() {
               Additional Support
             </span>
             <h2 className="font-serif text-2xl sm:text-3xl text-foreground font-normal tracking-tight">
-              Other ways Haven can support you today.
+              Other ways HerWay can support you today.
             </h2>
           </div>
 
@@ -714,7 +714,7 @@ export default function Home() {
             >
               <span className="text-xs text-muted-foreground">Need someone to talk to?</span>
               <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center justify-between">
-                <span>Talk to Haven</span>
+                <span>Talk to Niva</span>
                 <span>→</span>
               </h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
@@ -759,9 +759,9 @@ export default function Home() {
           <div className="space-y-1.5 max-w-sm">
             <div className="flex items-center gap-2">
               <span className="w-5 h-5 rounded bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center">
-                H
+                HW
               </span>
-              <span className="font-semibold text-sm text-foreground">Haven</span>
+              <span className="font-semibold text-sm text-foreground">HerWay</span>
             </div>
             <p className="text-muted-foreground leading-relaxed">
               A private, trauma-informed intelligence platform helping women navigate difficult situations with verified facts and safety plans.
@@ -776,7 +776,7 @@ export default function Home() {
               LawBot
             </Link>
             <Link href="/therapybot" className="hover:text-foreground transition-colors">
-              Talk to Haven
+              Talk to Niva
             </Link>
             <Link href="/community" className="hover:text-foreground transition-colors">
               Community

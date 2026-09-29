@@ -89,7 +89,7 @@ def normalize_query_key(query: str, vertical: str, location: Optional[str]) -> s
 # ---------------------------------------------------------------------------
 
 _ORCHESTRATOR_SYSTEM_PROMPT = """\
-You are Haven's Research Orchestrator, an intelligent planner for live SerpApi searches.
+You are HerWay's Research Orchestrator, an intelligent planner for live SerpApi searches.
 
 Your objective: MAXIMIZE THE INFORMATIONAL VALUE OF EACH SEARCH.
 Do NOT maximize search volume. Every query must answer a specific need.

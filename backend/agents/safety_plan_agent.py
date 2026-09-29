@@ -53,7 +53,7 @@ WOMEN_SAFETY_CATEGORIES = {
 }
 
 _SAFETY_ASSESSMENT_PROMPT = """\
-You are Haven's Safety Assessment Agent, specialized in trauma-informed women's safety analysis.
+You are HerWay's Safety Assessment Agent, specialized in trauma-informed women's safety analysis.
 
 Analyze the user's situation and verified evidence to extract EXPLICIT SAFETY INDICATORS.
 
@@ -70,7 +70,7 @@ Respond with valid JSON matching the SafetyAssessment schema.
 """
 
 _SAFETY_PLAN_SYNTHESIS_PROMPT = """\
-You are Haven's Safety Planning Agent.
+You are HerWay's Safety Planning Agent.
 
 Synthesize the Situation, Safety Assessment, verified evidence, and discovered local resources into a structured, highly actionable Personalized Safety Plan.
 

@@ -122,7 +122,7 @@ async def analyze_situation(payload: CaseCreate):
     if len(clean_text) < 5:
         raise HTTPException(
             status_code=400,
-            detail="Please provide a brief description of what happened so Haven can assist.",
+            detail="Please provide a brief description of what happened so HerWay can assist.",
         )
 
     from backend.agents.situation_agent import SituationAgent

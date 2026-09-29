@@ -33,7 +33,7 @@ function Navbar() {
     { href: '/', label: 'Home' },
     { href: '/cases', label: 'My Cases' },
     { href: '/lawbot', label: 'LawBot' },
-    { href: '/therapybot', label: 'Talk to Haven' },
+    { href: '/therapybot', label: 'Talk to Niva' },
     ...(mounted && user && (user.unsafeMetadata as { isAdmin?: boolean })?.isAdmin
       ? [{ href: '/dashboard', label: 'Dashboard' }]
       : []),
@@ -48,15 +48,15 @@ function Navbar() {
       <Link
         href="/"
         className="font-semibold text-lg text-foreground hover:text-primary transition-colors flex items-center gap-2 shrink-0"
-        aria-label="Haven — go to homepage"
+        aria-label="HerWay — go to homepage"
       >
         <span
-          className="w-7 h-7 rounded-md bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm"
+          className="w-7 h-7 rounded-md bg-primary flex items-center justify-center text-primary-foreground font-bold text-xs"
           aria-hidden="true"
         >
-          H
+          HW
         </span>
-        Haven
+        HerWay
       </Link>
 
       {/* Primary nav links — desktop */}

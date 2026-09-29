@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _PLANNER_SYSTEM_PROMPT = """\
-You are the Action Planning Agent for Haven.
+You are the Action Planning Agent for HerWay.
 
 You receive a research report with:
 - Situation summary, category, user goal, known facts, user claims, and unknowns.

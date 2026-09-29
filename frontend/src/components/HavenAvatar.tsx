@@ -236,7 +236,7 @@ export default function HavenAvatar({
             <div className={`w-32 h-32 rounded-full flex items-center justify-center bg-gradient-to-tr from-primary/30 to-purple-400/30 border-2 border-primary/40 shadow-inner transition-transform duration-700 ${
               isSpeaking ? 'scale-105 animate-pulse' : 'scale-100'
             }`}>
-              <span className="text-4xl select-none" role="img" aria-label="Haven Companion">
+              <span className="text-4xl select-none" role="img" aria-label="Niva Support Companion">
                 🕊️
               </span>
             </div>
@@ -249,7 +249,7 @@ export default function HavenAvatar({
           </div>
 
           <div className="space-y-1">
-            <h3 className="text-base font-semibold text-foreground">Haven Support Companion</h3>
+            <h3 className="text-base font-semibold text-foreground">Niva Support Companion</h3>
             <p className="text-xs text-muted-foreground max-w-xs">
               {loadStatus === 'loading'
                 ? 'Preparing your private conversation space…'
@@ -268,7 +268,7 @@ export default function HavenAvatar({
           aria-hidden="true"
         />
         <span className="font-medium text-foreground">
-          {isSpeaking ? 'Haven is speaking…' : 'Haven is listening'}
+          {isSpeaking ? 'Niva is speaking…' : 'Niva is listening'}
         </span>
       </div>
     </div>

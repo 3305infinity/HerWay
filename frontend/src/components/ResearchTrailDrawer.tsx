@@ -65,7 +65,7 @@ export default function ResearchTrailDrawer({
       className="fixed inset-0 z-50 flex justify-end"
       role="dialog"
       aria-modal="true"
-      aria-label="How Haven researched your situation"
+      aria-label="How HerWay researched your situation"
     >
       {/* Backdrop */}
       <div
@@ -81,7 +81,7 @@ export default function ResearchTrailDrawer({
         <div className="p-5 border-b border-border flex items-center justify-between">
           <div>
             <h2 className="text-base font-semibold text-foreground">
-              How Haven researched this
+              How HerWay researched this
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
               {successCount} search{successCount !== 1 ? 'es' : ''} · {evidenceCount} sources verified

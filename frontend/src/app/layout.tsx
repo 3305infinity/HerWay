@@ -7,9 +7,9 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from 'react-hot-toast';
 
 export const metadata: Metadata = {
-  title: 'Haven — A safe place to figure out what comes next',
+  title: 'HerWay — A safe place to figure out what comes next',
   description:
-    'Haven helps women navigate unsafe situations, find verified support resources, and build personalized safety plans.',
+    'HerWay helps women navigate unsafe situations, find verified support resources, and build personalized safety plans.',
 };
 
 const inter = Inter({

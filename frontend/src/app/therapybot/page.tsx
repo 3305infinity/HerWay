@@ -23,7 +23,7 @@ export default function TherapyBotPage() {
     {
       role: 'assistant',
       content:
-        "Hello, I'm Haven. Take a deep breath — you are in a safe, confidential space. Whether you're feeling overwhelmed, looking for guidance, or just need someone to talk to, I'm right here with you.",
+        "Hello, I'm Niva. Take a deep breath — you are in a safe, confidential space with HerWay. Whether you're feeling overwhelmed, looking for guidance, or just need someone to talk to, I'm right here with you.",
     },
   ]);
   const [inputText, setInputText] = useState('');
@@ -153,7 +153,7 @@ export default function TherapyBotPage() {
 
       {/* Main Workspace */}
       <div className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
-        {/* Left Column: 3D Haven Avatar */}
+        {/* Left Column: 3D Niva Avatar */}
         <div className="flex flex-col space-y-4">
           <div className="h-[380px] sm:h-[460px] w-full">
             <HavenAvatar isSpeaking={isSpeaking} />
@@ -200,8 +200,8 @@ export default function TherapyBotPage() {
           {/* Header */}
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/10">
             <div>
-              <h1 className="text-sm font-semibold text-foreground">Talk to Haven</h1>
-              <p className="text-xs text-muted-foreground">A gentle, supportive companion for your thoughts</p>
+              <h1 className="text-sm font-semibold text-foreground">Talk to Niva</h1>
+              <p className="text-xs text-muted-foreground">HerWay&apos;s gentle, supportive companion for your thoughts</p>
             </div>
             <Link
               href="/cases"
@@ -229,7 +229,7 @@ export default function TherapyBotPage() {
             {isLoading && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground p-2">
                 <span className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                Haven is listening and thinking…
+                Niva is listening and thinking…
               </div>
             )}
             <div ref={messagesEndRef} />

@@ -88,7 +88,7 @@ class ActionPlan(BaseModel):
     )
     disclaimer: str = Field(
         default=(
-            "Haven is an information and action-planning assistant. "
+            "HerWay is an information and action-planning assistant. "
             "This is not legal, medical, or professional advice. "
             "Please consult a qualified professional for authoritative guidance."
         ),

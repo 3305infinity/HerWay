@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """\
-You are the Situation Understanding Agent for Haven, an AI assistant for real-world problem resolution.
+You are the Situation Understanding Agent for HerWay, an AI assistant for real-world problem resolution.
 
 Your task is to analyze a user's natural language situation description and convert it into a structured JSON Situation object.
 

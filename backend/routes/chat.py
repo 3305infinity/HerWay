@@ -43,7 +43,7 @@ class ChatResponse(BaseModel):
 
 @router.post("", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Send a message and get a case-grounded reply from Haven's tool-calling assistant."""
+    """Send a message and get a case-grounded reply from HerWay's tool-calling assistant."""
     db = get_database()
     llm = LLMService()
     serpapi = SerpApiService()

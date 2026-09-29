@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _PLANNER_SYSTEM_PROMPT = """\
-You are the Research Planning Agent for Haven.
+You are the Research Planning Agent for HerWay.
 
 Given a structured Situation object, create a targeted research plan containing 2 to 5 distinct ResearchTask items.
 

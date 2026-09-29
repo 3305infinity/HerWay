@@ -126,7 +126,7 @@ export default function CaseWorkspacePage() {
       if (data.conversation) setChatHistory(data.conversation);
     } catch (err) {
       console.error('Failed to load case:', err);
-      setLoadError("Unable to connect to Haven servers. Please check your connection and try again.");
+      setLoadError("Unable to connect to HerWay servers. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -367,16 +367,16 @@ export default function CaseWorkspacePage() {
             <button
               onClick={() => setIsTrailOpen(true)}
               className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/50 hover:bg-muted border border-border rounded-lg transition-colors"
-              aria-label="See how Haven researched this case"
+              aria-label="See how HerWay researched this case"
             >
               How we researched this
             </button>
             <button
               onClick={() => setIsChatOpen(true)}
               className="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-              aria-label="Open Haven assistant"
+              aria-label="Open HerWay assistant"
             >
-              Ask Haven
+              Ask HerWay
             </button>
           </div>
         </div>
@@ -675,7 +675,7 @@ export default function CaseWorkspacePage() {
                 ) : (
                   <>
                     <p className="text-xs text-muted-foreground">
-                      These sources were retrieved and verified by Haven.
+                      These sources were retrieved and verified by HerWay.
                     </p>
                     <div className="space-y-3">
                       {evidenceList.map((ev: any, idx: number) => (
@@ -899,16 +899,16 @@ export default function CaseWorkspacePage() {
               )}
             </div>
 
-            {/* Ask Haven CTA */}
+            {/* Ask HerWay CTA */}
             <div className="haven-card space-y-3">
-              <h3 className="text-sm font-medium text-foreground">Ask Haven</h3>
+              <h3 className="text-sm font-medium text-foreground">Ask HerWay</h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                If your situation changes, or you have questions, Haven can update your plan.
+                If your situation changes, or you have questions, HerWay can update your plan.
               </p>
               <button
                 onClick={() => setIsChatOpen(true)}
                 className="w-full py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-lg transition-colors"
-                aria-label="Open Haven assistant chat"
+                aria-label="Open HerWay assistant chat"
               >
                 Ask a question
               </button>
@@ -919,7 +919,7 @@ export default function CaseWorkspacePage() {
               <button
                 onClick={() => setIsTrailOpen(true)}
                 className="w-full text-left haven-card hover:border-border/80 transition-colors space-y-1"
-                aria-label="See how Haven researched this case"
+                aria-label="See how HerWay researched this case"
               >
                 <h3 className="text-sm font-medium text-foreground">How we researched this</h3>
                 <p className="text-xs text-muted-foreground">
@@ -932,17 +932,17 @@ export default function CaseWorkspacePage() {
         </div>
       </div>
 
-      {/* ── Ask Haven Drawer ────────────────────────────────── */}
+      {/* ── Ask HerWay Drawer ────────────────────────────────── */}
       {isChatOpen && (
         <div
           className="fixed inset-y-0 right-0 w-full sm:w-[420px] bg-background border-l border-border shadow-2xl z-50 flex flex-col"
           role="dialog"
           aria-modal="true"
-          aria-label="Ask Haven assistant"
+          aria-label="Ask HerWay assistant"
         >
           <div className="p-4 border-b border-border flex items-center justify-between">
             <div className="space-y-0.5">
-              <h3 className="text-sm font-semibold text-foreground">Ask Haven</h3>
+              <h3 className="text-sm font-semibold text-foreground">Ask HerWay</h3>
               <p className="text-xs text-muted-foreground">Your plan can be updated based on new information.</p>
             </div>
             <button
@@ -959,7 +959,7 @@ export default function CaseWorkspacePage() {
           <div className="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-3">
             {chatHistory.length === 0 && (
               <div className="p-4 bg-muted/30 rounded-lg space-y-2">
-                <p className="text-sm font-medium text-foreground">What you can ask Haven:</p>
+                <p className="text-sm font-medium text-foreground">What you can ask HerWay:</p>
                 <ul className="space-y-1 text-sm text-muted-foreground">
                   <li>"He found out I called a lawyer — what should I do?"</li>
                   <li>"Is there a women's shelter near me that accepts pets?"</li>
@@ -982,7 +982,7 @@ export default function CaseWorkspacePage() {
             {isChatLoading && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" aria-hidden="true" />
-                Haven is thinking…
+                HerWay is thinking…
               </div>
             )}
           </div>
@@ -993,7 +993,7 @@ export default function CaseWorkspacePage() {
               value={chatMessage}
               onChange={(e) => setChatMessage(e.target.value)}
               placeholder="Ask a question or describe what's changed…"
-              aria-label="Message to Haven assistant"
+              aria-label="Message to HerWay assistant"
               className="flex-1 px-3.5 py-2.5 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
             />
             <button
