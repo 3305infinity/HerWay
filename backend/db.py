@@ -1,20 +1,14 @@
 import os
 import pickle
 import logging  
-from bson import Binary
+from bson import Binary, ObjectId
 from dotenv import load_dotenv
 from pymongo import MongoClient
-# Load environment variables
-from pymongo.operations import SearchIndexModel
-# from sentence_transformers import SentenceTransformer
 
 from backend.utils.embedding import generate_text_embedding
 from backend.logger import CustomFormatter
 
 load_dotenv()
-
-# Initialize db_client as None globally to cache the connection
-db_client = None
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -22,33 +16,245 @@ handler = logging.StreamHandler()
 handler.setFormatter(CustomFormatter())
 logger.addHandler(handler)
 
+# ---------------------------------------------------------------------------
+# In-Memory Resilient Fallback Database
+# Used when MongoDB (local or Atlas) is not running or unreachable
+# ---------------------------------------------------------------------------
+
+def _matches_query(doc: dict, query: dict) -> bool:
+    if not query:
+        return True
+    for k, v in query.items():
+        doc_val = doc.get(k)
+        if k == "_id":
+            if str(doc_val) != str(v):
+                return False
+        elif isinstance(v, dict):
+            for op, op_val in v.items():
+                if op == "$eq" and doc_val != op_val:
+                    return False
+                elif op == "$ne" and doc_val == op_val:
+                    return False
+                elif op == "$in" and doc_val not in op_val:
+                    return False
+        else:
+            if doc_val != v:
+                return False
+    return True
+
+
+class _InMemoryCursor:
+    def __init__(self, docs):
+        self._docs = list(docs)
+        self._pos = 0
+
+    def sort(self, key_or_list, direction=1):
+        if isinstance(key_or_list, list):
+            for key, direct in reversed(key_or_list):
+                rev = direct < 0
+                self._docs.sort(key=lambda d: str(d.get(key) or ""), reverse=rev)
+        elif isinstance(key_or_list, str):
+            rev = direction < 0
+            self._docs.sort(key=lambda d: str(d.get(key_or_list) or ""), reverse=rev)
+        return self
+
+    def limit(self, n):
+        self._docs = self._docs[:n]
+        return self
+
+    def __iter__(self):
+        return iter(self._docs)
+
+    def __next__(self):
+        if self._pos < len(self._docs):
+            doc = self._docs[self._pos]
+            self._pos += 1
+            return doc
+        raise StopIteration
+
+
+class _InsertResult:
+    def __init__(self, inserted_id):
+        self.inserted_id = inserted_id
+
+
+class _UpdateResult:
+    def __init__(self, matched_count=1, modified_count=1):
+        self.matched_count = matched_count
+        self.modified_count = modified_count
+
+
+class _DeleteResult:
+    def __init__(self, deleted_count=1):
+        self.deleted_count = deleted_count
+
+
+class _InMemoryCollection:
+    def __init__(self, name: str):
+        self.name = name
+        self._docs = []
+
+    def insert_one(self, doc: dict):
+        doc_copy = dict(doc)
+        if "_id" not in doc_copy:
+            doc_copy["_id"] = ObjectId()
+        elif isinstance(doc_copy["_id"], str) and ObjectId.is_valid(doc_copy["_id"]):
+            doc_copy["_id"] = ObjectId(doc_copy["_id"])
+        self._docs.append(doc_copy)
+        return _InsertResult(doc_copy["_id"])
+
+    def find_one(self, query=None):
+        query = query or {}
+        for d in self._docs:
+            if _matches_query(d, query):
+                return dict(d)
+        return None
+
+    def find(self, query=None):
+        query = query or {}
+        matched = [dict(d) for d in self._docs if _matches_query(d, query)]
+        return _InMemoryCursor(matched)
+
+    def update_one(self, query, update):
+        query = query or {}
+        for d in self._docs:
+            if _matches_query(d, query):
+                if "$set" in update:
+                    for k, v in update["$set"].items():
+                        d[k] = v
+                if "$push" in update:
+                    for k, v in update["$push"].items():
+                        if k not in d or not isinstance(d[k], list):
+                            d[k] = []
+                        d[k].append(v)
+                return _UpdateResult(matched_count=1, modified_count=1)
+        return _UpdateResult(matched_count=0, modified_count=0)
+
+    def delete_one(self, query):
+        query = query or {}
+        for i, d in enumerate(self._docs):
+            if _matches_query(d, query):
+                del self._docs[i]
+                return _DeleteResult(deleted_count=1)
+        return _DeleteResult(deleted_count=0)
+
+    def count_documents(self, query=None):
+        query = query or {}
+        return sum(1 for d in self._docs if _matches_query(d, query))
+
+    def create_index(self, *args, **kwargs):
+        pass
+
+
+class _InMemoryDatabase:
+    def __init__(self, name="SheBuilds"):
+        self.name = name
+        self._collections = {}
+
+    def __getitem__(self, item: str):
+        if item not in self._collections:
+            self._collections[item] = _InMemoryCollection(item)
+        return self._collections[item]
+
+
+# Global cached database handles
+db_client = None
+_in_memory_db = None
+_mongo_attempted = False
+
+
+def _seed_sample_data(db):
+    """Seed initial sample records for community and docs if empty."""
+    admin_col = db["admin"]
+    if admin_col.count_documents({}) == 0:
+        sample_posts = [
+            {
+                "_id": ObjectId("660000000000000000000001"),
+                "Name": "Anonymous Sister",
+                "Location": "28.6139, 77.2090",
+                "Preferred way of contact": "Text message",
+                "Contact info": "discreet-channel@proton.me",
+                "Frequency of domestic violence": "Weekly",
+                "Relationship with perpetrator": "Spouse",
+                "Severity of domestic violence": "High",
+                "Nature of domestic violence": "Verbal abuse, intimidation, and financial control",
+                "Impact on children": "Anxiety and fear at home",
+                "Culprit details": "Tall male, age 38, controls finances and mobile phone",
+                "Other info": "Reached out to Sakhi One Stop Centre and found temporary accommodation. There is hope.",
+                "status": "pending",
+            },
+            {
+                "_id": ObjectId("660000000000000000000002"),
+                "Name": "Anonymous Sister",
+                "Location": "19.0760, 72.8777",
+                "Preferred way of contact": "Email",
+                "Contact info": "private-support@safehaven.org",
+                "Frequency of domestic violence": "Daily",
+                "Relationship with perpetrator": "In-laws",
+                "Severity of domestic violence": "Medium",
+                "Nature of domestic violence": "Isolation, harassment over dowry demands",
+                "Impact on children": "None",
+                "Culprit details": "Mother-in-law and brother-in-law",
+                "Other info": "Filed an application under Section 12 PWDVA with legal aid advocate.",
+                "status": "closed",
+            },
+        ]
+        for p in sample_posts:
+            admin_col.insert_one(p)
+
+
 def get_database():
     """
-    Connect to the MongoDB database. Caches the connection so that it is reused
-    across multiple calls, improving performance by avoiding repeated handshakes.
+    Connect to MongoDB. Tries MONGO_ENDPOINT or MONGODB_URI with a 1.5s timeout.
+    If MongoDB is reachable, returns the real MongoDB database.
+    If MongoDB is unavailable (e.g. local mongod not running), falls back
+    to an in-memory database store so the app never hangs or crashes with
+    ServerSelectionTimeoutError.
     """
-    global db_client
-    if db_client is None:
+    global db_client, _in_memory_db, _mongo_attempted
+
+    if db_client is not None:
         try:
-            # Create a single MongoClient instance
-            db_client = MongoClient(os.getenv("MONGO_ENDPOINT"))
-            logger.info("Connected to the database")    
-        except Exception as e:
-            print("Error connecting to the database:", e)
-            return None
-    return db_client["SheBuilds"]
+            return db_client["SheBuilds"]
+        except Exception:
+            pass
+
+    if not _mongo_attempted:
+        _mongo_attempted = True
+        uri = os.getenv("MONGO_ENDPOINT") or os.getenv("MONGODB_URI")
+        if uri:
+            try:
+                # Fast timeout (1.5s) to avoid 30-second freezing
+                client = MongoClient(
+                    uri,
+                    serverSelectionTimeoutMS=1500,
+                    connectTimeoutMS=1500,
+                    socketTimeoutMS=2000,
+                )
+                client.admin.command("ping")
+                db_client = client
+                logger.info("Connected to MongoDB successfully (%s)", uri.split("@")[-1])
+                return db_client["SheBuilds"]
+            except Exception as exc:
+                logger.warning(
+                    "MongoDB connection could not be established (%s). "
+                    "Falling back to resilient in-memory database store for development.",
+                    exc,
+                )
+
+    if _in_memory_db is None:
+        _in_memory_db = _InMemoryDatabase("SheBuilds")
+        _seed_sample_data(_in_memory_db)
+        logger.info("In-memory database store initialized with seed records.")
+
+    return _in_memory_db
 
 
 def insert_data_into_db(
     name, location, contact_info, severity, culprit, relationship_to_culprit, other_info
 ):
-    """
-    Inserts a document into the 'posts' collection of the MongoDB database.
-    Reuses the cached database connection.
-    """
     db = get_database()
     if db is None:
-        print("Database connection is not available.")
         return None
 
     collection = db["complains2"]
@@ -62,43 +268,33 @@ def insert_data_into_db(
         "other_info": other_info,
         "status": "Pending",
     }
-    culprit_embedding = generate_text_embedding(culprit)
-    document["culprit_embedding"] = culprit_embedding
     try:
-        # Insert the document into the collection
+        culprit_embedding = generate_text_embedding(culprit)
+        document["culprit_embedding"] = culprit_embedding
+    except Exception:
+        pass
+
+    try:
         result = collection.insert_one(document)
-        print(f"Inserted document with ID: {result.inserted_id}")
         return result.inserted_id
     except Exception as e:
-        print("Error inserting data:", e)
+        logger.error("Error inserting data into DB: %s", e)
         return None
 
 
-# culprit='a black eyed women who is bald'
-# insert_data_into_db('name', 'location', '', '', culprit, 'husband', '')
-# # insert sample data into the database with some random location as {lat, lng}
-# insert_data_into_db("Alice", {"lat": 37.7749, "lng": -122.4194}, "High", "Broken window", "Needs urgent repair")
-# insert_data_into_db("Bob", {"lat": 37.7749, "lng": -122.4194}, "Low", "Leaky faucet", "Minor issue")
-# insert_data_into_db("Charlie", {"lat": 37.7749, "lng": -122.4194}, "Medium", "Faulty wiring", "Needs inspection")
-
-
-# Function to upload embeddings to MongoDB
 def upload_embeddings_to_mongo(file_contents):
     db = get_database()
+    if db is None:
+        return
     collection = db["doc_embedding"]
     for filename, content in file_contents:
-        # Generate embeddings for the document content
-        embedding = generate_text_embedding(content)
-
-        # Prepare the document to insert into MongoDB
-        doc = {
-            "filename": filename,
-            "embedding": Binary(pickle.dumps(embedding)),  # Store as a binary object
-            "content": content[
-                :500
-            ],  # Store the first 500 characters of the content for preview
-        }
-
-        # Insert the document into the MongoDB collection
-        collection.insert_one(doc)
-        print(f"Uploaded {filename} to MongoDB.")
+        try:
+            embedding = generate_text_embedding(content)
+            doc = {
+                "filename": filename,
+                "embedding": Binary(pickle.dumps(embedding)),
+                "content": content[:500],
+            }
+            collection.insert_one(doc)
+        except Exception as e:
+            logger.warning("Could not upload embedding for %s: %s", filename, e)

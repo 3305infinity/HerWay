@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
 import ResearchTrailDrawer from '@/components/ResearchTrailDrawer';
 
@@ -90,12 +91,17 @@ export default function CaseWorkspacePage() {
   const [isChatLoading, setIsChatLoading] = useState(false);
 
   // Tabs for the main content area
-  const [activeTab, setActiveTab] = useState<'plan' | 'evidence' | 'resources'>('plan');
+  const [activeTab, setActiveTab] = useState<'plan' | 'evidence' | 'resources' | 'community'>('plan');
 
   // Resource search
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchingResources, setIsSearchingResources] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // Community capability: results fetched via ChatAgent search_community tool
+  const [communityPosts, setCommunityPosts] = useState<any[]>([]);
+  const [isLoadingCommunity, setIsLoadingCommunity] = useState(false);
+  const [communityLoaded, setCommunityLoaded] = useState(false);
 
   // Sidebar collapse on mobile
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -214,10 +220,10 @@ export default function CaseWorkspacePage() {
     }
   };
 
-  const handleSendChat = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatMessage.trim()) return;
-    const userMsg = chatMessage.trim();
+  const handleSendChat = async (e?: React.FormEvent, customMsg?: string) => {
+    if (e) e.preventDefault();
+    const userMsg = (customMsg || chatMessage).trim();
+    if (!userMsg) return;
     setChatMessage('');
     setChatHistory((prev) => [...prev, { role: 'user', content: userMsg }]);
     setIsChatLoading(true);
@@ -238,6 +244,40 @@ export default function CaseWorkspacePage() {
       setIsChatLoading(false);
     }
   };
+
+  // Fetch community posts similar to this case via ChatAgent search_community tool
+  const loadCommunityPosts = async () => {
+    if (communityLoaded || !caseData) return;
+    setIsLoadingCommunity(true);
+    try {
+      const query = caseData.situation?.case_summary || caseData.situation_text || '';
+      const res = await fetch(`${API_BASE}/api/v2/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          case_id: caseId,
+          message: `Find similar community posts for: ${query.slice(0, 200)}`,
+          history: [],
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.community_posts) setCommunityPosts(data.community_posts);
+      }
+    } catch (err) {
+      console.error('Community posts load error:', err);
+    } finally {
+      setIsLoadingCommunity(false);
+      setCommunityLoaded(true);
+    }
+  };
+
+  // Load community posts when tab is opened
+  useEffect(() => {
+    if (activeTab === 'community' && !communityLoaded) {
+      loadCommunityPosts();
+    }
+  }, [activeTab]);
 
   // ── Loading & error states ─────────────────────────────────
   if (loading) {
@@ -364,6 +404,35 @@ export default function CaseWorkspacePage() {
                 Plan updated ({safetyPlan.updates_history.length})
               </button>
             )}
+
+            {/* ── Original Haven capabilities — quick-access links ─── */}
+            {isSafetyMode && (
+              <Link
+                href={`/therapybot?case_id=${caseId}`}
+                id="case-talk-to-niva-btn"
+                className="px-3 py-1.5 text-xs font-medium text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors whitespace-nowrap"
+                aria-label="Talk to Niva, HerWay emotional support companion"
+              >
+                💜 Talk to Niva
+              </Link>
+            )}
+            <Link
+              href={`/lawbot?case_id=${caseId}`}
+              id="case-legal-help-btn"
+              className="px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors whitespace-nowrap"
+              aria-label="Get legal information via LawBot"
+            >
+              ⚖️ Legal Help
+            </Link>
+            <Link
+              href="/create-post"
+              id="case-discreet-msg-btn"
+              className="px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors whitespace-nowrap hidden sm:inline-flex"
+              aria-label="Send a discreet message using steganography"
+            >
+              🔒 Discreet Message
+            </Link>
+
             <button
               onClick={() => setIsTrailOpen(true)}
               className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/50 hover:bg-muted border border-border rounded-lg transition-colors"
@@ -499,12 +568,13 @@ export default function CaseWorkspacePage() {
               </details>
             )}
 
-            {/* Tab bar */}
+            {/* Tab bar — original tabs + Community (existing Haven capability) */}
             <div className="border-b border-border" role="tablist">
               {([
                 { id: 'plan', label: isSafetyMode ? 'Safety plan' : 'Action plan', count: isSafetyMode ? `${completedSafetyActions}/${totalSafetyActions}` : `${completedStdActions}/${totalStdActions}` },
                 { id: 'evidence', label: 'Sources', count: evidenceList.length > 0 ? String(evidenceList.length) : undefined },
                 { id: 'resources', label: 'Resources', count: allResources.length > 0 ? String(allResources.length) : undefined },
+                { id: 'community', label: 'Community', count: communityPosts.length > 0 ? String(communityPosts.length) : undefined },
               ] as const).map((tab) => (
                 <button
                   key={tab.id}
@@ -861,6 +931,71 @@ export default function CaseWorkspacePage() {
                 )}
               </div>
             )}
+            {/* ── TAB: Community ─────────────────────────────────── */}
+            {/* Reuses existing Haven embedding search via ChatAgent search_community tool */}
+            {activeTab === 'community' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-medium text-foreground">Community Experiences</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Similar situations shared anonymously by others in the HerWay community
+                    </p>
+                  </div>
+                  <Link href="/community" className="text-xs text-primary hover:underline font-medium shrink-0">
+                    Browse all →
+                  </Link>
+                </div>
+                {isLoadingCommunity ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-20 bg-muted/50 rounded-xl animate-pulse" />
+                    ))}
+                  </div>
+                ) : communityPosts.length > 0 ? (
+                  <div className="space-y-3">
+                    {communityPosts.map((post: any, idx: number) => (
+                      <div key={post._id || idx} className="border border-border rounded-xl p-4 space-y-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-medium text-foreground">{post.name || 'Anonymous Sister'}</span>
+                            {post.location && (
+                              <span className="text-[11px] text-muted-foreground">📍 {post.location}</span>
+                            )}
+                            {post.severity && (
+                              <span className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded capitalize">{post.severity}</span>
+                            )}
+                          </div>
+                          {post._id && (
+                            <Link href={`/post/${post._id}`} className="text-xs text-primary hover:underline font-medium">
+                              Read post →
+                            </Link>
+                          )}
+                        </div>
+                        {post.other_info && <p className="text-xs text-foreground/80 leading-relaxed">{post.other_info}</p>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-10 space-y-3">
+                    <p className="text-muted-foreground text-sm">No similar community posts found yet.</p>
+                    <p className="text-xs text-muted-foreground">You are not alone. Share your experience anonymously to help others.</p>
+                    <Link href="/create-post" className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors">
+                      Share anonymously →
+                    </Link>
+                  </div>
+                )}
+                <div className="border border-border/50 rounded-xl p-4 bg-muted/20 space-y-2">
+                  <p className="text-xs font-medium text-foreground">Discreet communication</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Need to send a hidden help message? HerWay can hide text inside an ordinary image using steganography.
+                  </p>
+                  <button type="button" onClick={() => setIsChatOpen(true)} className="text-xs text-primary hover:underline font-medium">
+                    Ask HerWay about discreet messaging →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Sidebar: Situation details (desktop) ─────────── */}
@@ -958,13 +1093,42 @@ export default function CaseWorkspacePage() {
 
           <div className="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-3">
             {chatHistory.length === 0 && (
-              <div className="p-4 bg-muted/30 rounded-lg space-y-2">
-                <p className="text-sm font-medium text-foreground">What you can ask HerWay:</p>
-                <ul className="space-y-1 text-sm text-muted-foreground">
-                  <li>"He found out I called a lawyer — what should I do?"</li>
-                  <li>"Is there a women's shelter near me that accepts pets?"</li>
-                  <li>"How do I safely save text messages as evidence?"</li>
-                </ul>
+              <div className="p-4 bg-muted/30 rounded-xl space-y-3">
+                <p className="text-xs font-semibold text-foreground">Interactive Assistant Tools:</p>
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSendChat(undefined, "Generate a formal legal complaint report for authorities based on this case.")}
+                    className="text-left p-2.5 rounded-lg border border-border bg-card hover:border-primary/40 text-xs text-foreground transition-colors flex items-center justify-between group"
+                  >
+                    <span>📝 Generate formal police/authority report</span>
+                    <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendChat(undefined, "What are my legal rights in this situation under Indian law?")}
+                    className="text-left p-2.5 rounded-lg border border-border bg-card hover:border-primary/40 text-xs text-foreground transition-colors flex items-center justify-between group"
+                  >
+                    <span>⚖️ Check legal rights & statutes (LawBot RAG)</span>
+                    <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendChat(undefined, "Share an empowering poem to give me courage.")}
+                    className="text-left p-2.5 rounded-lg border border-border bg-card hover:border-primary/40 text-xs text-foreground transition-colors flex items-center justify-between group"
+                  >
+                    <span>💜 Words of strength & courage (Poem)</span>
+                    <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendChat(undefined, "How can I encode a discreet hidden message inside an ordinary photo?")}
+                    className="text-left p-2.5 rounded-lg border border-border bg-card hover:border-primary/40 text-xs text-foreground transition-colors flex items-center justify-between group"
+                  >
+                    <span>🔒 Discreet steganography instructions</span>
+                    <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                  </button>
+                </div>
               </div>
             )}
             {chatHistory.map((msg, idx) => (

@@ -1,10 +1,12 @@
 'use client';
 import React from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Input } from '../../components/ui/input';
-import { ArrowUp, Scale, Triangle, Check, Fingerprint } from 'lucide-react';
+import { ArrowUp, Scale, Triangle, Check, Fingerprint, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useClerk } from '@clerk/nextjs';
 import Image from 'next/image';
@@ -33,6 +35,12 @@ const promptSuggestions = [
 ];
 
 function Page() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // When opened from a Case Workspace (/lawbot?case_id=xxx), answers are
+  // grounded in the case evidence via ChatAgent's invoke_lawbot tool.
+  const caseId = searchParams?.get('case_id') || null;
+
   const [messages, setMessages] = React.useState<
     {
       text: string;
@@ -40,6 +48,7 @@ function Page() {
     }[]
   >([]);
 
+  const [isPromoting, setIsPromoting] = React.useState(false);
   const typingText = useTypingText('What can I help you with?');
   const [isThinking, setIsThinking] = React.useState<boolean>(false);
   // Custom hook for typing effect
@@ -73,7 +82,15 @@ function Page() {
 
     const response = await fetch('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ userInput: data.message }),
+      body: JSON.stringify({
+        userInput: data.message,
+        // Pass case_id so the proxy routes to case-aware ChatAgent
+        ...(caseId ? { case_id: caseId } : {}),
+        history: messages.map((m) => ({
+          role: m.isUser ? 'user' : 'assistant',
+          content: m.text,
+        })),
+      }),
       headers: { 'Content-Type': 'application/json' },
     });
 
@@ -87,9 +104,50 @@ function Page() {
     form.handleSubmit(onSubmit)();
   };
 
+  const handlePromoteToCase = async () => {
+    if (messages.length === 0 || isPromoting) return;
+    setIsPromoting(true);
+    try {
+      const userQuestions = messages
+        .filter((m) => m.isUser)
+        .map((m) => m.text)
+        .join('. ');
+      const firstQuestion = messages.find((m) => m.isUser)?.text || 'Legal Inquiry';
+
+      const res = await fetch('/api/v2/cases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user?.id || 'anonymous',
+          situation_text: userQuestions || firstQuestion,
+          category: 'legal_information',
+          title: `Legal Inquiry: ${firstQuestion.slice(0, 45)}`,
+        }),
+      });
+
+      if (res.ok) {
+        const newCase = await res.json();
+        const id = newCase.id || newCase._id;
+        router.push(`/cases/${id}`);
+      }
+    } catch (err) {
+      console.error('Failed to promote to case:', err);
+    } finally {
+      setIsPromoting(false);
+    }
+  };
+
   if (messages.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center">
+        {caseId && (
+          <div className="mb-6 px-4 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-300 flex items-center gap-3">
+            <span>⚖️ Grounded in Case #{caseId} verified evidence</span>
+            <Link href={`/cases/${caseId}`} className="font-semibold underline hover:no-underline">
+              Return to Case Workspace →
+            </Link>
+          </div>
+        )}
         <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mb-5">
           {typingText}
         </h1>
@@ -136,9 +194,32 @@ function Page() {
   }
 
   return (
-    <div className="flex flex-col h-full items-center justify-center max-w-3xl w-full mx-auto ">
+    <div className="flex flex-col h-full items-center justify-center max-w-3xl w-full mx-auto pt-2">
+      {/* Contextual Case Strip */}
+      {caseId ? (
+        <div className="w-full mb-3 px-4 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-300 flex items-center justify-between">
+          <span>⚖️ Answers grounded in Case #{caseId} verified evidence</span>
+          <Link href={`/cases/${caseId}`} className="font-semibold underline hover:no-underline">
+            Return to Case Workspace →
+          </Link>
+        </div>
+      ) : (
+        <div className="w-full mb-2 px-3 py-2 border-b border-border flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Direct LawBot legal session</span>
+          <button
+            type="button"
+            onClick={handlePromoteToCase}
+            disabled={isPromoting}
+            className="px-3 py-1 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 transition-colors inline-flex items-center gap-1.5 font-medium disabled:opacity-50"
+          >
+            <Sparkles size={13} />
+            <span>{isPromoting ? 'Creating case…' : 'Promote to Guided Case'}</span>
+          </button>
+        </div>
+      )}
+
       <div className="w-full overflow-y-auto rounded-md custom-scrollbar ">
-        <div className="flex flex-col gap-2 h-[80vh] overflow-y-auto custom-scrollbar p-4">
+        <div className="flex flex-col gap-2 h-[75vh] overflow-y-auto custom-scrollbar p-4">
           {messages.length > 0 &&
             messages.map((message, index) => (
               <div

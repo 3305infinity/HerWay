@@ -693,7 +693,7 @@ export default function Home() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <Link
               href="/lawbot"
               className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 transition-colors space-y-2 group"
@@ -733,6 +733,20 @@ export default function Home() {
               </h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Read anonymous shared experiences and peer encouragement.
+              </p>
+            </Link>
+
+            <Link
+              href="/create-post"
+              className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 transition-colors space-y-2 group"
+            >
+              <span className="text-xs text-muted-foreground">Need discreet help?</span>
+              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center justify-between">
+                <span>Discreet Message</span>
+                <span>→</span>
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Hide text inside an ordinary image using steganography.
               </p>
             </Link>
 
@@ -780,6 +794,9 @@ export default function Home() {
             </Link>
             <Link href="/community" className="hover:text-foreground transition-colors">
               Community
+            </Link>
+            <Link href="/create-post" className="hover:text-foreground transition-colors">
+              Discreet Message
             </Link>
             <button
               type="button"

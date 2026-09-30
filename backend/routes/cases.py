@@ -34,7 +34,10 @@ def _get_db():
     db = get_database()
     if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    ensure_case_indexes(db)
+    try:
+        ensure_case_indexes(db)
+    except Exception:
+        pass
     return db
 
 
@@ -81,9 +84,15 @@ async def get_case(case_id: str, user_id: Optional[str] = None):
     collection = _get_collection()
 
     try:
-        doc = collection.find_one({"_id": ObjectId(case_id)})
+        obj_id = ObjectId(case_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid Case ID format")
+
+    try:
+        doc = collection.find_one({"_id": obj_id})
+    except Exception as exc:
+        logger.error("DB error in get_case: %s", exc)
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
 
     if not doc:
         raise HTTPException(status_code=404, detail="Case not found")
@@ -111,8 +120,12 @@ async def list_cases(
     if status:
         query["status"] = status
 
-    docs = collection.find(query).sort("updated_at", -1).limit(limit)
-    return [Case(**serialize_object_id(doc)) for doc in docs]
+    try:
+        docs = collection.find(query).sort("updated_at", -1).limit(limit)
+        return [Case(**serialize_object_id(doc)) for doc in docs]
+    except Exception as exc:
+        logger.warning("Error fetching cases from DB: %s", exc)
+        return []
 
 
 @router.post("/analyze", response_model=Situation)

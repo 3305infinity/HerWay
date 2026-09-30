@@ -50,11 +50,31 @@ function Page() {
     />, // Step 2
   ];
 
-  if (!user) {
+  const [allowAnonymous, setAllowAnonymous] = useState(false);
+
+  if (!user && !allowAnonymous) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center -mt-[150px]">
-          <h1 className="text-2xl font-bold">Please sign in to continue</h1>
+      <div className="flex items-center justify-center min-h-[calc(100vh-3.5rem)] p-4">
+        <div className="text-center max-w-sm space-y-4 p-8 border border-border rounded-2xl bg-card shadow-sm">
+          <h1 className="text-xl font-semibold text-foreground">Discreet Message & Post</h1>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Signing in allows you to manage your posts and reports. If you are in immediate danger or prefer complete discretion, you can also proceed anonymously.
+          </p>
+          <div className="space-y-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setAllowAnonymous(true)}
+              className="w-full py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:bg-primary/90 transition-colors"
+            >
+              Continue Anonymously
+            </button>
+            <a
+              href="/sign-in"
+              className="block w-full py-2.5 border border-border text-foreground text-sm font-medium rounded-xl hover:bg-muted transition-colors text-center"
+            >
+              Sign In with Account
+            </a>
+          </div>
         </div>
       </div>
     );

@@ -1,7 +1,7 @@
 <div align="center">
 
 # 🛡️ Haven  
-### *A Silent Shield, A Strong Voice — AI-Powered Women Safety & Autonomous Real-World Case Resolution*
+### *A Silent Shield, A Strong Voice — AI-Powered Women's Safety & Autonomous Real-World Case Resolution*
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Next.js-14.2-black.svg?style=flat&logo=next.js&logoColor=white)](https://nextjs.org)
@@ -9,14 +9,14 @@
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue.svg?style=flat&logo=python&logoColor=white)](https://python.org)
 [![MongoDB Atlas](https://img.shields.io/badge/MongoDB-Atlas%20Vector%20Search-47A248.svg?style=flat&logo=mongodb&logoColor=white)](https://mongodb.com)
 [![SerpApi](https://img.shields.io/badge/SerpApi-Live%20Search%20Engine-4285F4.svg?style=flat)](https://serpapi.com)
-[![Google Gemini](https://img.shields.io/badge/Google-Gemini%202.5%20%2F%20Flash-8E75C2.svg?style=flat&logo=google&logoColor=white)](https://ai.google.dev)
+[![Google Gemini](https://img.shields.io/badge/Google-Gemini%20Flash%20%2F%20Pro-8E75C2.svg?style=flat&logo=google&logoColor=white)](https://ai.google.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-**Haven** is an end-to-end, production-grade AI platform built to empower women in abusive, hazardous, or complex situations by providing **discreet safety channels**, **autonomous real-world investigation powered by live search**, **legal guidance**, **3D empathetic therapy**, and **step-by-step actionable resolution plans**.
+**Haven** is an end-to-end, trauma-informed AI platform built to empower women navigating dangerous, abusive, or legally complex situations. It unifies **discreet safety channels**, **autonomous real-world investigation powered by live search**, **RAG-grounded legal guidance**, **3D empathetic therapy with voice**, **anonymous community peer support**, and **living safety & action plans**.
 
-[**Explore Architecture**](#-system-architecture) • [**Quick Start**](#-quick-start--installation) • [**Feature Tour**](#-core-capabilities--feature-deep-dive) • [**API Reference**](#-api-reference)
+[**Explore Architecture**](#-system-architecture) • [**Quick Start**](#-quick-start--installation) • [**Feature Tour**](#-core-capabilities--feature-deep-dive) • [**Bi-Directional Integration**](#-bi-directional-case-integration) • [**API Reference**](#-api-reference)
 
 ---
 
@@ -24,38 +24,46 @@
 
 ## 🌟 Vision & Problem Statement
 
-Globally, **1 in 3 women** experiences physical, emotional, or sexual abuse in her lifetime. In domestic and intimate partner abuse scenarios:
-- **Digital Surveillance is Rampant**: Abusers routinely monitor browser history, text messages, phone logs, and app lists, making direct calls for help extremely dangerous.
-- **Access to Legal & Mental Health Support is Severely Constrained**: Less than 14% of survivors have access to formal legal aid, and only 10% receive mental health assistance.
-- **Information Overload & Misinformation**: In a crisis, survivors face generic, outdated advice rather than verified local shelter contacts, jurisdiction-specific legal procedures, and step-by-step safety roadmaps.
+Globally, **1 in 3 women** experiences physical, emotional, or sexual abuse in her lifetime. In crisis and coercive-control scenarios:
+- **Digital Surveillance is Rampant**: Perpetrators routinely monitor browser history, text messages, phone logs, and app lists, making direct calls for help hazardous.
+- **Access to Legal & Mental Health Support is Constrained**: Less than 14% of survivors have access to timely legal aid, and only 10% receive trauma-informed mental health assistance.
+- **Information Overload & Misinformation**: In a crisis, survivors face generic or outdated advice rather than verified local shelter contacts, jurisdiction-specific statutes (e.g., PWDVA, POSH, IPC/BNS), and step-by-step safety roadmaps.
 
-### The Haven Solution
-Haven unifies two powerful layers into one seamless system:
-1. **The Women-Centric Safety Shield**: Steganographic distress transmission hidden in innocuous social images, 3D animated empathetic AI therapy, RAG-powered legal counsel, emergency quick-exit switches, and authority triage dashboards with perpetrator vector matching.
-2. **Autonomous Real-World Problem Resolution**: An agentic search and synthesis engine powered by **live SerpApi** that analyzes complex distress narratives, autonomously queries web/news/local/map sources, verifies domain trust, and builds tailored action plans with persistent case workspaces.
+### The Unified Haven Architecture
+Haven seamlessly bridges two complementary layers into a unified product experience:
+1. **The Women-Centric Safety Shield (Original Haven)**: LSB steganographic distress transmission hidden inside everyday photos, 3D animated empathetic companion (Niva), RAG-powered Indian legal guidance (LawBot), anonymous community shared experiences, dual Gemini+Gemma formal report generation, inspirational poetry, and emergency quick-exit switches.
+2. **Autonomous Real-World Problem Resolution (v2 Agent Pipeline)**: A multi-agent search and synthesis engine powered by **live SerpApi** that analyzes distress narratives, autonomously queries web/news/local/maps sources, verifies domain authority, and builds living safety plans with persistent case workspaces.
+3. **Bi-Directional Case Bridges**: Any standalone tool (LawBot, TherapyBot, Community, Discreet Message) can be promoted into an active Guided Case with one click, and any Case Workspace pre-loads context into LawBot, Niva, and community search.
 
 ---
 
 ## 🏗️ System Architecture
 
-Haven is organized as a decoupled, multi-agent system comprising a **FastAPI backend** (Python 3.12) and a **Next.js 14 App Router frontend** (TypeScript & Tailwind CSS).
-
 ```mermaid
 flowchart TB
-    subgraph Client["Frontend (Next.js 14 App Router)"]
-        UI_Home["Homepage & Intake (/page.tsx)"]
-        UI_Case["Case Workspace (/cases/[id])"]
-        UI_Law["Legal Advisor (/lawbot)"]
-        UI_Therapy["3D Therapy Avatar (/therapybot)"]
-        UI_Stego["Discreet SOS Stego Studio"]
-        UI_Admin["Authority Dashboard (/dashboard)"]
+    subgraph Client["Unified Frontend (Next.js 14 App Router)"]
+        UI_Nav["Unified Navigation Shell (Navbar with Quick Exit ESC)"]
+        UI_Home["Homepage & Guided Intake (/page.tsx)"]
+        UI_Case["Case Workspace & Living Safety Plan (/cases/[id])"]
+        UI_Law["Legal Rights Advisor (/lawbot)"]
+        UI_Therapy["3D Empathetic Avatar Niva (/therapybot)"]
+        UI_Community["Anonymous Community (/community & /post/[id])"]
+        UI_Stego["Discreet SOS Stego Studio (/create-post)"]
+        UI_Admin["Authority Incident Dashboard (/dashboard)"]
+    end
+
+    subgraph Bridges["Bi-Directional Integration Layer"]
+        B_Law["LawBot ↔ Case Context & Promotion"]
+        B_Therapy["TherapyBot ↔ Living Safety Plan"]
+        B_Comm["Community ↔ Case Creation ('Start case from this')"]
+        B_Stego["Stego Share ↔ Save as Guided Safety Case"]
     end
 
     subgraph Gateway["FastAPI API Gateway (Port 8000)"]
-        R_Research["/api/research/*"]
-        R_Cases["/api/cases/*"]
-        R_Chat["/api/chat/*"]
-        R_Legacy["/encode, /decode, /culprit-match"]
+        R_V2_Research["/api/v2/research/* (Autonomous Multi-Agent Pipeline)"]
+        R_V2_Cases["/api/v2/cases/* (CRUD & Safety Assessment)"]
+        R_V2_Chat["/api/v2/chat (Case-Aware Tool-Calling Assistant)"]
+        R_Legacy["Root Endpoints (/encode, /decode, /text-generation, /find-match, etc.)"]
     end
 
     subgraph AgenticPipeline["Autonomous Research & Resolution Engine"]
@@ -64,25 +72,32 @@ flowchart TB
         Agent_Serp["3. Live SerpApi Service (Web / News / Local / Maps)"]
         Agent_Verif["4. Source Verification & Trust Analysis Agent"]
         Agent_Action["5. Action Planning & Synthesis Agent"]
+        Agent_Chat["6. ChatAgent (Tool Loop: LawBot, Stego, Community, Reports)"]
+    end
+
+    subgraph ServiceLayer["Reusable Service Wrappers (Zero Duplication)"]
+        S_Embed["EmbeddingService (Atlas Vector Search RAG)"]
+        S_Report["ReportService (Dual LLM Formal Reports & Poetry)"]
+        S_Steg["StegService (LSB Image Steganography)"]
+        S_Serp["SerpApiService (Live Google Search Client)"]
     end
 
     subgraph DataAI["AI, Knowledge & Storage Services"]
         DB_Mongo[(MongoDB Atlas / Vector Search)]
-        AI_Gemini["Google Gemini (2.5 Flash / Pro)"]
-        AI_Groq["Groq Gemma / LLaMA Fallback"]
-        AI_Bedrock["AWS Bedrock / Titan"]
-        TTS_Eleven["ElevenLabs TTS (Lip Sync)"]
+        AI_Gemini["Google Gemini (Flash / Pro)"]
+        AI_Gemma["Gemma Text Expansion Fallback"]
         Ext_SerpApi["SerpApi Live Search Engine"]
     end
 
-    UI_Home -->|Submit Situation Narrative| R_Research
-    UI_Case -->|Fetch Case / Stream Chat| R_Cases & R_Chat
-    UI_Law -->|Legal Inquiries| R_Legacy
-    UI_Therapy -->|Avatar Speech & Coping| R_Legacy
-    UI_Stego -->|Embed / Extract Distress| R_Legacy
-    UI_Admin -->|Triage & Culprit Match| R_Legacy
+    UI_Nav --> UI_Home & UI_Case & UI_Law & UI_Therapy & UI_Community & UI_Stego
+    UI_Home -->|Intake Narrative| R_V2_Cases
+    UI_Case -->|Fetch Case / Tool Chat| R_V2_Cases & R_V2_Chat
+    UI_Law -->|Legal Q&A & Case Bridge| B_Law --> R_V2_Chat & R_Legacy
+    UI_Therapy -->|Voice Chat & Case Bridge| B_Therapy --> R_V2_Chat
+    UI_Community -->|Search & Start Case| B_Comm --> R_Legacy & R_V2_Cases
+    UI_Stego -->|Encode & Save Case| B_Stego --> R_Legacy & R_V2_Cases
 
-    R_Research --> Agent_Sit
+    R_V2_Research --> Agent_Sit
     Agent_Sit --> Agent_Plan
     Agent_Plan --> Agent_Serp
     Agent_Serp -->|Live HTTP Queries| Ext_SerpApi
@@ -90,10 +105,11 @@ flowchart TB
     Agent_Verif --> Agent_Action
     Agent_Action --> DB_Mongo
 
-    Agent_Sit -.-> AI_Gemini
-    Agent_Action -.-> AI_Gemini
-    R_Chat -.-> AI_Gemini
-    R_Legacy -.-> DB_Mongo & AI_Bedrock & AI_Groq & TTS_Eleven
+    Agent_Chat --> S_Embed & S_Report & S_Steg & S_Serp
+    S_Embed --> DB_Mongo
+    S_Report --> AI_Gemini & AI_Gemma
+    S_Steg --> R_Legacy
+    S_Serp --> Ext_SerpApi
 ```
 
 ---
@@ -101,7 +117,7 @@ flowchart TB
 ## 🚀 Core Capabilities & Feature Deep-Dive
 
 ### 1. 🔍 Autonomous Real-World Case Resolution (Powered by SerpApi)
-When a user describes a difficult situation ("My landlord locked me out illegally while my abusive partner is threatening me in Austin, TX"), Haven executes an autonomous 5-stage research pipeline:
+When a user describes a situation (*"My landlord locked me out illegally while my abusive partner is threatening me in Austin, TX"*), Haven dispatches an autonomous 5-stage research sequence:
 
 ```
 [User Situation Narrative] 
@@ -113,7 +129,7 @@ When a user describes a difficult situation ("My landlord locked me out illegall
    │       • Generates targeted search queries across Web, News, Local Shelters, and Maps
    │
    ├──► [Stage 3: Live SerpApi Execution]
-   │       • Executes live HTTP queries (no hardcoded data)
+   │       • Executes live HTTP queries (no hallucinated phone numbers or addresses)
    │       • Normalizes results into structured domain models (title, url, domain, snippet, rating, address)
    │
    ├──► [Stage 4: Source Verification & Trust Scoring]
@@ -125,70 +141,92 @@ When a user describes a difficult situation ("My landlord locked me out illegall
            • Persists active case to MongoDB with interactive checklist tracking
 ```
 
-#### Key Components:
-- **`SerpApiService`** (`backend/services/serpapi_service.py`): Reusable, typed client supporting `search_web()`, `search_news()`, `search_local()`, and `search_maps()` with retries, timeout management, parameter validation, and rate-limiting.
+#### Key Modules:
+- **`SerpApiService`** (`backend/services/serpapi_service.py`): Typed client supporting `search_web()`, `search_news()`, `search_local()`, and `search_maps()` with retries, timeout management, parameter validation, and rate-limiting.
 - **`SourceVerifier`** (`backend/agents/source_verifier.py`): Calculates authority scores (0–100%), extracts verifiable citations, and surfaces official helpline numbers.
 - **`ActionPlanner`** (`backend/agents/action_planner.py`): Builds sequenced phases (`Immediate Safety (0–2 hrs)`, `Short-term Actions (24–48 hrs)`, `Follow-Up & Legal Steps`).
 
 ---
 
-### 2. 🗂️ Interactive Case Workspace & Memory (`/cases/[id]`)
-A responsive 3-column command center designed for clarity during high-stress situations:
+### 2. 🗂️ Interactive Case Workspace & Living Safety Plan (`/cases/[id]`)
+A responsive command center designed for clarity during high-stress situations:
 
-| Column | Contents & Capabilities |
+| Tab / Element | Contents & Capabilities |
 | :--- | :--- |
-| **Left: Situation & Facts** | Summary card, urgency badge, category tags, detected timeline, identified key facts, and flagged missing information. |
-| **Center: Action Plan Checklist** | Interactive task list grouped by priority (Immediate, Short-term, Long-term). Users can toggle task completion, track progress percentage, and view safety warnings. Includes a **Download Case PDF** button. |
-| **Right: Verified Evidence & Resources** | Verified source cards with trust badges (Gov, Legal, Crisis), clickable links, mapped phone numbers, address info, and ratings. |
-| **Interactive Assistant Drawer** | In-case conversational AI with complete contextual memory of the case history, facts, and research findings. |
+| **Header Quick-Links** | One-click access to **💜 Talk to Niva** (case-grounded), **⚖️ Legal Help** (case-grounded), **🔒 Discreet Message**, and **How we researched this**. |
+| **Safety / Action Plan Tab** | Interactive task checklist grouped by urgency. Users can mark steps done, track completion progress, and view safety warnings. |
+| **Sources & Evidence Tab** | Verified source cards with trust badges (Gov, Legal, Crisis), clickable links, mapped phone numbers, address info, and ratings. |
+| **Resources Tab** | Verified local crisis centers, One Stop Centres, and shelters with integrated SerpApi local maps search. |
+| **Community Tab** | Displays peer experiences from the Haven community matching the current case via vector similarity. |
+| **Interactive Assistant Drawer** | In-case conversational AI backed by `ChatAgent` with tool calling (`invoke_lawbot`, `search_community`, `encode_message`, `generate_formal_report`, `generate_poem`, `adapt_safety_plan`, `search_safety_resources`). |
 | **Research Trail Drawer** | Complete transparency drawer detailing exact search queries dispatched, query timestamps, raw SerpApi snippets, and verification scores. |
 
 ---
 
-### 3. 🖼️ Discreet SOS Steganography Studio
-Allows women living under digital surveillance to conceal distress messages inside innocent photos (e.g., flowers, pets, landscapes) before posting to social media or sending via messaging apps.
+### 3. ⚖️ Legal Rights & Constitution Advisor (`/lawbot`)
+- **Direct & Grounded Modes**:
+  - Standalone: Answers questions on Indian law, IPC/BNS sections, PWDVA 2005, POSH Act 2013, and consumer rights.
+  - Case-Aware: When opened via `/lawbot?case_id=xxx`, answers are grounded in the verified case evidence via ChatAgent's `invoke_lawbot` tool.
+- **Bi-Directional Case Promotion**: Users chatting with LawBot in standalone mode can click **"✨ Promote to Guided Case"** at any time to convert their legal inquiry into a structured case with an automated action plan.
+
+---
+
+### 4. 🤖 3D Empathetic Therapy Avatar Niva (`/therapybot`)
+- **3D Real-Time Avatar**: Renders a 3D model (`/models/avatar.glb`) centered on face and shoulders using Three.js with mouse parallax tracking and graceful fallback.
+- **Trauma-Informed Voice & Synthesis**: Integrates browser speech synthesis with rate/pitch modulation for calming delivery, natural voice selection, and a one-click mute/stop control.
+- **Calming Interventions**: Guided 4-7-8 breathing exercises and supportive de-escalation dialogue.
+- **Bi-Directional Case Connection**:
+  - When linked with a case (`?case_id=xxx`), Niva has access to safety plan context and can trigger safety adaptations if the situation escalates.
+  - In standalone mode, users can click **"✨ Save as Guided Case"** to convert their emotional support session into an active safety plan.
+
+---
+
+### 5. 🤝 Anonymous Community & Shared Experiences (`/community`)
+- **Safe Peer Support**: Survivors read anonymous experiences shared by women who navigated similar domestic or workplace challenges. All personal identifiers are protected.
+- **Search & Severity Filtering**: Real-time filtering by severity (High, Medium, Low) and keyword search.
+- **Bi-Directional Case Creation**: Every community post features a **"✨ Start case from this"** button, allowing a survivor to immediately launch their own private safety case pre-populated with relevant context.
+- **Post Details (`/post/[id]`)**: Detailed view with incident location mapped via Google Maps embed, activity timeline, and status tracking (pending/closed).
+
+---
+
+### 6. 🖼️ Discreet SOS Steganography Studio (`/create-post`)
+Conceals help messages inside innocent photos (e.g., flowers, pets, food) before sharing them on social media or messaging platforms:
 
 ```
-[User Distress Keywords] 
-       │ 
-       ▼ 
-[Bedrock/Gemini Text Expansion] ──► "Help, locked in room by partner, need immediate assistance"
-       │
-       ▼
-[AI Image Generation / Upload] ──► [Innocent Landscape Image]
-       │
-       ▼
-[LSB Steganography Encoder]    ──► [Encoded Visual Image (Visually Identical)]
-       │
-       ▼ (Shared on Social Media with Trigger Hashtag)
-[Authority Cron Scanner]       ──► Decodes Pixel Data ──► Extracts SOS ──► Triage Alert
+[Distress Keywords / Form] ──► [Gemini + Gemma Text Expansion] ──► [Formal Distress Report]
+                                              │
+                                              ▼
+[Upload Ordinary Photo] ──────► [LSB Pixel Steganography] ──────► [Visually Normal Photo]
+                                              │
+                                              ▼
+                             [Share on Socials / Save as Guided Case]
 ```
 
-- **Reverse Steganography**: Authorities decode the hidden payload from flagged image posts.
-- **Text Decomposition**: Automatically parses extracted distress text into urgency levels, location markers, and suspect details.
-- **Perpetrator Similarity Vector Match**: Generates embeddings of suspect descriptions and matches against historical records using MongoDB Atlas Vector Search ($vectorSearch).
+- **LSB Steganography**: Encodes text into the least significant bits of pixel data using Pillow and NumPy without altering the visual appearance of the image.
+- **Anonymous Mode**: Distressed users can proceed anonymously without mandatory Clerk authentication.
+- **Dual Text Expansion**: Expands brief distress notes using dual Gemini and Gemma models for resilience.
+- **Bi-Directional Case Bridge**: Step 3 (`Share.tsx`) includes a **"✨ Save as Guided Safety Case"** button to automatically initialize an active case file.
 
 ---
 
-### 4. 🤖 3D Empathetic Therapy Avatar (`/therapybot`)
-- Built with **Three.js** and **React Three Fiber** (`@react-three/fiber`, `@react-three/drei`).
-- Renders dynamic 3D humanoid avatars with synchronized facial morph targets (`viseme`, smiling, comforting, neutral).
-- Integrates **ElevenLabs Text-to-Speech** for lifelike voice synthesis.
-- Implements trauma-informed conversational guidelines for survivors experiencing panic, PTSD, or isolation.
+### 7. 🚨 Safety & Emergency Features
+- **Global Quick Exit (`ESC`)**: Sticky button and global keyboard listener redirect immediately to Google (`https://www.google.com`).
+- **Emergency Helplines Banner**: Persistent display of official 24/7 helplines (**112** Police/Emergency, **181** Women Helpline, **1091** Women Police Desk) across Home, TherapyBot, and Community pages.
 
 ---
 
-### 5. ⚖️ Legal Rights & Constitution Advisor (`/lawbot`)
-- RAG-powered legal assistant indexing statutory frameworks, women's protective legislation, domestic violence acts, custody procedures, and FIR filing rights.
-- Translates dense statutory language into plain, actionable advice.
-- Provides jurisdiction-aware templates for police complaints and restraining orders.
+## 🔄 Bi-Directional Case Integration
 
----
+Every core feature in Haven works both **independently** and **deeply integrated** with the Case Architecture:
 
-### 6. 🚨 Survivor Safety Features
-- **Quick Escape / Panic Button**: Instantly redirects the browser to a harmless generic website (e.g., Google Weather or Wikipedia) and clears temporary in-memory state.
-- **Decoy Mode**: Replaces the screen with a functional calculator/notes interface with a single keystroke (`Esc` / configurable).
-- **Direct Helplines Drawer**: Instant access to emergency numbers (National Domestic Violence Hotline, Women's Helpline 1091/112, Crisis Text Lines).
+| Feature | Standalone Usage | Inside a Case Workspace | Reverse Bridge (Tool ➔ Case) |
+| :--- | :--- | :--- | :--- |
+| **LawBot** (`/lawbot`) | Ask any legal question directly. | Header button opens LawBot with case evidence pre-loaded. | **"Promote to Guided Case"** button creates case from chat. |
+| **TherapyBot** (`/therapybot`) | Calming 3D companion conversation. | Header button opens Niva with safety plan context. | **"Save as Guided Case"** button turns session into case. |
+| **Community** (`/community`) | Browse and filter shared stories. | Dedicated tab displays peer posts matching current case. | **"Start case from this"** button creates case from post. |
+| **Discreet Stego** (`/create-post`) | Hide help text in an image. | Header button opens stego creator; ChatAgent provides guide. | **"Save as Guided Safety Case"** button creates case on share. |
+| **Formal Reports** | Dual Gemini/Gemma expansion in form. | ChatAgent `generate_formal_report` tool drafts report. | Generated reports can be downloaded or saved to case. |
+| **Poem Generator** | Standalone `/poem-generation` route. | ChatAgent `generate_poem` tool provides words of strength. | Integrated directly into chat drawer. |
 
 ---
 
@@ -197,27 +235,31 @@ Allows women living under digital surveillance to conceal distress messages insi
 ```text
 Haven-main/
 ├── backend/
-│   ├── agents/                     # Autonomous AI Agents
+│   ├── agents/                     # Autonomous AI Agents & Tool Registries
 │   │   ├── action_planner.py       # Synthesizes phased action plans & steps
-│   │   ├── chat_agent.py           # In-case conversational assistant
+│   │   ├── chat_agent.py           # In-case assistant with full tool loop (LawBot, Stego, etc.)
 │   │   ├── research_agent.py       # Query generator & research coordinator
 │   │   ├── situation_agent.py      # Narrative decomposition & entity extraction
 │   │   └── source_verifier.py      # Domain authority & consensus scoring
 │   ├── routes/                     # FastAPI Endpoints
-│   │   ├── cases.py                # CRUD for cases, action item toggling, PDF export
-│   │   ├── chat.py                 # Case-aware chat session endpoints
-│   │   ├── legacy.py               # Stego, lawbot, therapybot, SOS endpoints
-│   │   └── research.py             # Multi-stage research pipeline endpoints
-│   ├── services/                   # External API & Core Services
-│   │   ├── llm_service.py          # Unified LLM provider (Gemini / Groq / Bedrock)
-│   │   ├── maps_service.py         # Geocoding & spatial resource locator
-│   │   ├── news_service.py         # News search aggregator
-│   │   └── serpapi_service.py      # Robust SerpApi client (Web/News/Local/Maps)
+│   │   ├── cases.py                # /api/v2/cases/* — Case CRUD & safety assessment
+│   │   ├── chat.py                 # /api/v2/chat — Case-aware conversational assistant
+│   │   ├── legacy.py               # Root endpoints — Stego, LawBot, posts, poems, images
+│   │   └── research.py             # /api/v2/research/* — Multi-stage research pipeline
+│   ├── services/                   # Core & External Services
+│   │   ├── embedding_service.py    # Wrapper for Atlas Vector Search RAG (search_legal_docs)
+│   │   ├── llm_service.py          # Unified LLM provider (Google Gemini Flash/Pro)
+│   │   ├── report_service.py       # Wrapper for formal report & poem generation
+│   │   ├── serpapi_service.py      # Robust SerpApi client (Web/News/Local/Maps)
+│   │   └── steganography_service.py# Wrapper for LSB pixel encode/decode
+│   ├── utils/                      # Low-level utilities
+│   │   ├── embedding.py            # Gemini text-embedding-004 & Atlas vector search
+│   │   ├── steganography.py        # LSB image encoding & decoding
+│   │   └── text_llm.py             # Dual Gemini/Gemma text expansion & poem generation
 │   ├── db.py                       # MongoDB connection & indexes
 │   ├── logger.py                   # Structured logging utility
 │   ├── main.py                     # FastAPI application entrypoint
 │   ├── models/                     # Pydantic schemas and domain models
-│   ├── prompts.py                  # Agent system prompts & templates
 │   ├── requirements.txt            # Base backend dependencies
 │   └── requirements-v2.txt         # Enhanced agent & research dependencies
 │
@@ -225,25 +267,31 @@ Haven-main/
 │   ├── src/
 │   │   ├── app/                    # Next.js 14 App Router
 │   │   │   ├── cases/              # Case Workspace & Case List views
-│   │   │   │   ├── [id]/page.tsx   # 3-Column Interactive Case Command Center
+│   │   │   │   ├── [id]/page.tsx   # 3-Column Interactive Case Workspace
 │   │   │   │   └── page.tsx        # Case History & Saved Cases
-│   │   │   ├── lawbot/             # AI Legal Advisor
-│   │   │   ├── therapybot/         # 3D Animated Therapy Avatar
+│   │   │   ├── community/          # Anonymous Support Community feed & search
+│   │   │   ├── create-post/        # 3-Step Stego Studio & Post Submission
 │   │   │   ├── dashboard/          # Authority Incident Management
-│   │   │   ├── layout.tsx          # Root Layout with Clerk Auth & Theme
-│   │   │   └── page.tsx            # Main Landing & "What's Going On?" Intake
+│   │   │   ├── lawbot/             # AI Legal Advisor with Case Bridge
+│   │   │   ├── post/               # Post detail view ([id]) & redirect
+│   │   │   ├── therapybot/         # 3D Animated Therapy Avatar with Voice
+│   │   │   ├── layout.tsx          # Root Layout with Clerk Auth, Theme & Navbar
+│   │   │   └── page.tsx            # Main Landing & "What Happened?" Intake
 │   │   ├── components/             # Reusable UI Components
-│   │   │   ├── Navbar.tsx          # Navigation with Quick Exit & Panic Trigger
-│   │   │   ├── InputForm.tsx       # Smart Intake Form with Live Timeline
-│   │   │   ├── Timeline.tsx        # Live Multi-Stage Pipeline Stepper
+│   │   │   ├── Navbar.tsx          # Unified Navigation with Quick Exit & Links
+│   │   │   ├── HavenAvatar.tsx     # Three.js 3D Avatar with lip-sync & fallback
+│   │   │   ├── PostDetail.tsx      # Community post view with 'Create Case' action
+│   │   │   ├── Share.tsx           # Stego sharing with 'Save as Case' action
+│   │   │   ├── InputForm.tsx       # Intake Form with Geolocation
 │   │   │   ├── ResearchTrailDrawer.tsx # Live search transparency drawer
-│   │   │   └── ui/                 # Accessible UI Primitives
-│   ├── public/                     # 3D GLTF models, audio assets, logos
+│   │   │   └── ui/                 # Accessible UI Primitives (Radix UI)
+│   │   ├── lib/                    # Client utilities (cleanText, fetchCityName, cn)
+│   ├── public/                     # 3D GLTF models (/models/avatar.glb), images
 │   ├── package.json                # Frontend dependencies & scripts
 │   └── tailwind.config.ts          # Styling & color tokens
 │
-├── ARCHITECTURE.md                 # Technical design document
-├── WOMEN_SAFETY_AUDIT.md           # Safety & privacy compliance audit
+├── ARCHITECTURE.md                 # Technical architecture & design rationale
+├── WOMEN_SAFETY_AUDIT.md           # Safety, privacy & trauma-informed compliance audit
 └── README.md                       # Comprehensive project documentation
 ```
 
@@ -252,45 +300,41 @@ Haven-main/
 ## ⚙️ Environment Configuration
 
 ### 1. Backend Configuration (`backend/.env`)
-Create `backend/.env` with the following variables:
+Create `backend/.env` with the following keys:
 
 ```env
 # ==============================================================================
-# 1. CORE SEARCH & RESEARCH (Required for autonomous problem resolution)
+# 1. CORE SEARCH & RESEARCH (Required for live real-world research)
 # ==============================================================================
 SERPAPI_API_KEY=your_serpapi_api_key_here
 
 # ==============================================================================
-# 2. AI MODEL PROVIDERS (At least one required; Gemini recommended)
+# 2. AI MODEL PROVIDERS (Required: Google Gemini)
 # ==============================================================================
 GEMINI_API_KEY=your_google_gemini_api_key_here
 GROQ_API_TOKEN=your_groq_api_token_here
 
-# (Optional) AWS Bedrock & S3 Configuration (for Legacy Stego & Titan Image Gen)
+# (Optional) AWS Bedrock & S3 Configuration (for legacy Titan image gen)
 AWS_ACCESS_KEY_ID=your_aws_access_key_id
 AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
 AWS_REGION=us-east-1
 S3_BUCKET_NAME=your_s3_bucket_name
 
-# (Optional) Voice Synthesis for 3D Therapy Avatar
-ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
-
 # ==============================================================================
-# 3. DATABASE (MongoDB Atlas or Local MongoDB)
+# 3. DATABASE (MongoDB Atlas recommended for Vector Search)
 # ==============================================================================
-# If using MongoDB Atlas:
 MONGO_ENDPOINT=mongodb+srv://<username>:<password>@cluster0.mongodb.net/haven?retryWrites=true&w=majority
 # Or standard URI:
 MONGODB_URI=mongodb://localhost:27017/haven
 
 # ==============================================================================
-# 4. GEOCODING & MAPS (Optional fallback)
+# 4. GEOCODING & MAPS (Optional reverse geocoding)
 # ==============================================================================
 OPENCAGE_API_KEY=your_opencage_key_here
 ```
 
 ### 2. Frontend Configuration (`frontend/.env.local`)
-Create `frontend/.env.local` with the following variables:
+Create `frontend/.env.local` with the following keys:
 
 ```env
 # Clerk Authentication Keys (From https://dashboard.clerk.com)
@@ -339,21 +383,15 @@ cd backend
 python -m venv .venv
 
 # 3. Activate virtual environment
-# On Windows (PowerShell):
+# Windows (PowerShell):
 .\.venv\Scripts\Activate.ps1
-# On Windows (Command Prompt):
-.\.venv\Scripts\activate.bat
-# On Linux / macOS:
+# Linux / macOS:
 source .venv/bin/activate
 
 # 4. Install dependencies
 pip install -r requirements.txt -r requirements-v2.txt
 
-# 5. Configure environment variables
-# Copy template and fill your keys:
-cp .env.example .env   # Or create .env manually
-
-# 6. Start the FastAPI development server
+# 5. Start the FastAPI server
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -369,13 +407,10 @@ Open a second terminal window:
 # 1. Navigate to frontend
 cd frontend
 
-# 2. Install Node dependencies
+# 2. Install dependencies
 npm install
 
-# 3. Configure environment variables
-# Create frontend/.env.local and populate Clerk and Backend URL
-
-# 4. Start the Next.js development server
+# 3. Start Next.js development server
 npm run dev
 ```
 
@@ -385,92 +420,44 @@ npm run dev
 
 ## 📡 API Reference
 
-### 1. Autonomous Research & Problem Resolution
+### 1. v2 Case & Research Pipeline (`/api/v2/*`)
 
 | Method | Endpoint | Description | Payload / Query |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/research/understand` | Analyzes raw text into structured situation entities | `{"situation": "...", "location": "..."}` |
-| `POST` | `/api/research/plan` | Generates targeted search queries for situation | `{"understanding": {...}}` |
-| `POST` | `/api/research/execute` | Dispatches live SerpApi queries across Web/News/Local/Maps | `{"queries": [...]}` |
-| `POST` | `/api/research/synthesize` | Verifies sources and synthesizes final action plan | `{"understanding": {...}, "evidence": [...]}` |
-| `POST` | `/api/research/full-pipeline` | Executes all 5 stages end-to-end and creates a case | `{"situation": "...", "location": "...", "category": "..."}` |
-
-#### Sample Full Pipeline Request:
-```bash
-curl -X POST "http://localhost:8000/api/research/full-pipeline" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "situation": "I was kicked out of my apartment by my landlord without notice and my ex-partner is threatening to come find me in Austin, Texas.",
-       "location": "Austin, TX",
-       "category": "safety_and_legal"
-     }'
-```
+| `POST` | `/api/v2/cases` | Creates a new case and saves situation details | `{"user_id": "...", "situation_text": "...", "category": "..."}` |
+| `GET` | `/api/v2/cases` | Lists saved cases (filtered by user_id) | `?user_id=...` |
+| `GET` | `/api/v2/cases/{id}` | Retrieves full case detail (facts, plan, evidence) | Path parameter `{id}` |
+| `POST` | `/api/v2/cases/analyze` | Generates initial situation facts & missing info | `{"situation_text": "..."}` |
+| `POST` | `/api/v2/cases/{id}/research` | Dispatches live multi-agent SerpApi research | None (uses stored case narrative) |
+| `POST` | `/api/v2/cases/{id}/actions/{idx}/toggle` | Toggles an action step's completion status | Path parameters `{id}`, `{idx}` |
+| `POST` | `/api/v2/chat` | Case-grounded tool-calling conversational agent | `{"case_id": "...", "message": "...", "mode": "therapy|legal"}` |
 
 ---
 
-### 2. Case Workspace & Memory
+### 2. Original Haven Endpoints (Root Mount)
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/cases` | Lists all saved cases for user (filtered by Clerk User ID). |
-| `GET` | `/api/cases/{case_id}` | Retrieves full case detail (facts, plan, evidence, research trail). |
-| `PATCH`| `/api/cases/{case_id}/tasks/{task_id}` | Toggles action item completion status. |
-| `POST` | `/api/cases/{case_id}/export-pdf` | Generates and streams a downloadable PDF case summary. |
-| `POST` | `/api/chat/case/{case_id}/message` | Sends a message to the case-aware AI assistant. |
-
----
-
-### 3. Women-Centric Safety, Steganography & Support
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `POST` | `/encode` | Encodes distress text into image pixel data using LSB steganography. |
-| `POST` | `/decode` | Decodes hidden text from an encoded image. |
-| `POST` | `/text-generation` | Expands raw distress notes into structured sentences. |
-| `POST` | `/culprit-match` | Runs vector similarity search on perpetrator physical/behavior profiles. |
-| `POST` | `/api/lawbot/chat` | Queries legal advisor on domestic rights, custody, and FIR filing. |
-| `POST` | `/api/therapy/chat` | Conversational therapy support with emotional context. |
+| `POST` | `/text-generation` | Expands distress text using dual Gemini + Gemma models |
+| `POST` | `/text-decomposition` | Parses raw text into structured attributes |
+| `POST` | `/save-extracted-data` | Saves extracted incident report to the `admin` collection |
+| `POST` | `/encode` | Conceals text in image pixel data using LSB steganography |
+| `POST` | `/decode` | Extracts hidden text from an uploaded steganographic image |
+| `GET` | `/poem-generation` | Generates an inspirational coping poem for distress |
+| `GET` | `/get-admin-posts` | Retrieves all community/admin incident reports |
+| `GET` | `/find-match` | Finds top matching reports using Atlas vector similarity |
+| `GET` | `/get-post/{id}` | Retrieves a specific community post by MongoDB ObjectId |
+| `POST` | `/close-issue/{id}` | Updates issue status to `closed` |
+| `POST` | `/upload_embeddings/` | Generates and uploads legal document embeddings to MongoDB |
 
 ---
 
 ## 🔒 Security, Privacy & Trauma-Informed Design
 
-1. **Discreet Operation**:
-   - Zero search queries or situation text are cached in unencrypted third-party logs.
-   - Built-in `Escape` key quick-navigation clears active frontend state and loads a decoy interface.
-2. **API Key Isolation**:
-   - SerpApi, Gemini, Groq, and AWS keys reside strictly on the backend and are **never** exposed to client-side bundles.
-3. **Strict Source Verification**:
-   - Every claim presented in the Action Plan is cross-referenced with real search snippets and rated by source authority (preferencing `.gov`, `.edu`, and verified non-profit organizations).
-4. **Data Ownership & Confidentiality**:
-   - Cases are tied to authenticated Clerk IDs with private MongoDB collections. No user data is sold or used for model training.
-
----
-
-## 🧪 Testing & Verification
-
-Run backend unit and integration tests:
-
-```bash
-cd backend
-pytest tests/ -v
-```
-
-Test SerpApi Live Search independently:
-```bash
-python -c "from services.serpapi_service import SerpApiService; s = SerpApiService(); print(s.search_web('emergency women shelter Austin TX'))"
-```
-
----
-
-## 🤝 Contributing
-
-We welcome contributions from developers, legal aid advocates, and trauma specialists!
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1. **Quick Escape (`ESC`)**: Global key listener immediately redirects the active browser tab to Google.
+2. **Stateless Discretion**: Anonymous creation options enable survivors under device monitoring to generate steganographic help messages and browse peer stories without account registration.
+3. **API Key Isolation**: SerpApi, Gemini, and database credentials remain strictly within the backend server environment.
+4. **Verifiable Information**: Every phone number, address, and legal provision presented in action plans is verified through live search against official `.gov` registries, legal aid networks, and verified crisis desks.
 
 ---
 
@@ -478,9 +465,9 @@ We welcome contributions from developers, legal aid advocates, and trauma specia
 
 This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
-- **SerpApi** for powering reliable, live real-world information retrieval.
-- **Google Gemini** & **Groq** for high-speed agentic reasoning and natural language synthesis.
-- **Three.js** & **ElevenLabs** for powering the 3D empathetic therapy avatar.
+- **SerpApi** for powering reliable, live real-world search retrieval.
+- **Google Gemini** for high-speed agentic reasoning and natural language synthesis.
+- **Three.js** for powering the 3D empathetic companion avatar.
 - **MongoDB Atlas** for document persistence and vector similarity search.
 
 ---

@@ -1,6 +1,8 @@
 'use client';
 import { cleanText, fetchCityName } from '@/lib/utils';
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from './ui/button';
 import {
   CircleX,
@@ -12,6 +14,8 @@ import {
   TrendingUp,
   Loader2,
   Check,
+  Sparkles,
+  ArrowLeft,
 } from 'lucide-react';
 import CustomTimeline from './Timeline';
 import toast from 'react-hot-toast';
@@ -33,9 +37,11 @@ interface Post {
 }
 
 function PostDetail({ id }: { id: string }) {
+  const router = useRouter();
   const [post, setPost] = useState<Post | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [city, setCity] = useState<string | null>(null);
+  const [isCreatingCase, setIsCreatingCase] = useState(false);
 
   useEffect(() => {
     const fetchPostById = async () => {
@@ -115,25 +121,94 @@ function PostDetail({ id }: { id: string }) {
     }
   };
 
+  const handleCreateCase = async () => {
+    if (!post || isCreatingCase) return;
+    setIsCreatingCase(true);
+    try {
+      const summary = [
+        post['Nature of domestic violence'] ? `Nature: ${cleanText(post['Nature of domestic violence'])}` : '',
+        post['Severity of domestic violence'] ? `Severity: ${cleanText(post['Severity of domestic violence'])}` : '',
+        post['Frequency of domestic violence'] ? `Frequency: ${cleanText(post['Frequency of domestic violence'])}` : '',
+        post['Culprit details'] ? `Culprit: ${cleanText(post['Culprit details'])}` : '',
+        post['Other info'] ? `Additional Details: ${cleanText(post['Other info'])}` : '',
+      ]
+        .filter(Boolean)
+        .join('. ');
+
+      const res = await fetch('/api/v2/cases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: 'anonymous',
+          situation_text: summary || 'Reported situation from community post',
+          category: 'domestic_violence',
+          location: post.Location ? { display_name: cleanText(post.Location) } : null,
+          title: `Case from Report: ${cleanText(post.Name || 'Community Incident').slice(0, 40)}`,
+        }),
+      });
+
+      if (res.ok) {
+        const newCase = await res.json();
+        const caseId = newCase.id || newCase._id;
+        toast.success('Guided Safety Case created!');
+        router.push(`/cases/${caseId}`);
+      } else {
+        toast.error('Failed to create case');
+      }
+    } catch {
+      toast.error('Error creating case');
+    } finally {
+      setIsCreatingCase(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full max-w-6xl w-full mx-auto p-5">
-      <div className="flex items-center justify-between w-full">
-        <h1 className="text-3xl font-bold">{post.Name}</h1>
-        {post.status === 'pending' && (
+    <div className="flex flex-col h-full max-w-6xl w-full mx-auto p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <Link
+          href="/community"
+          className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 transition-colors"
+        >
+          <ArrowLeft size={14} />
+          <span>Back to Community</span>
+        </Link>
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between w-full gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold">{post.Name}</h1>
+          {post.Location && (
+            <p className="text-xs text-muted-foreground mt-1">📍 {cleanText(post.Location)}</p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
-            onClick={() => handleCloseIssue(post._id)}
-            className="flex items-center space-x-2"
+            onClick={handleCreateCase}
+            disabled={isCreatingCase}
+            className="flex items-center space-x-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
           >
-            <CircleX />
-            Close Issue
+            <Sparkles size={16} />
+            <span>{isCreatingCase ? 'Creating case…' : 'Create Guided Case'}</span>
           </Button>
-        )}
-        {post.status === 'closed' && (
-          <Button className="flex items-center space-x-2 bg-green-500 text-white hover:bg-green-600">
-            <Check />
-            Issue Closed
-          </Button>
-        )}
+
+          {post.status === 'pending' && (
+            <Button
+              onClick={() => handleCloseIssue(post._id)}
+              variant="outline"
+              className="flex items-center space-x-2"
+            >
+              <CircleX size={16} />
+              <span>Close Issue</span>
+            </Button>
+          )}
+          {post.status === 'closed' && (
+            <Button className="flex items-center space-x-2 bg-green-500 text-white hover:bg-green-600">
+              <Check size={16} />
+              <span>Issue Closed</span>
+            </Button>
+          )}
+        </div>
       </div>
       <div className="grid grid-cols-3 gap-3 mt-5">
         <div className="max-w-sm w-full rounded-md border flex flex-col gap-3 border-gray-400 p-3">

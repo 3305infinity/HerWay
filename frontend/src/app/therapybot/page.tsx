@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import HavenAvatar from '@/components/HavenAvatar';
 
@@ -19,6 +20,13 @@ const SUGGESTIONS = [
 ];
 
 export default function TherapyBotPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // When opened from a Case Workspace (/therapybot?case_id=xxx), Niva has
+  // full case context and can invoke safety plan tools if situation escalates.
+  const caseId = searchParams?.get('case_id') || null;
+
+  const [isPromoting, setIsPromoting] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
@@ -104,6 +112,10 @@ export default function TherapyBotPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
+          // Pass case_id for case-grounded therapy support when available
+          ...(caseId ? { case_id: caseId } : {}),
+          // mode='therapy' nudges ChatAgent towards emotional support tooling
+          mode: 'therapy',
           history: newHistory.slice(-6).map((m) => ({ role: m.role, content: m.content })),
         }),
       });
@@ -128,6 +140,34 @@ export default function TherapyBotPage() {
       speakText(fallback);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveAsCase = async () => {
+    const userMsgs = messages.filter((m) => m.role === 'user').map((m) => m.content);
+    if (userMsgs.length === 0 || isPromoting) return;
+    setIsPromoting(true);
+    try {
+      const situation = userMsgs.join('. ');
+      const res = await fetch(`${API_BASE}/api/v2/cases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: 'anonymous',
+          situation_text: situation,
+          category: 'safety',
+          title: `Emotional Support Case: ${situation.slice(0, 40)}`,
+        }),
+      });
+      if (res.ok) {
+        const newCase = await res.json();
+        const id = newCase.id || newCase._id;
+        router.push(`/cases/${id}`);
+      }
+    } catch (err) {
+      console.error('Failed to save therapy session as case:', err);
+    } finally {
+      setIsPromoting(false);
     }
   };
 
@@ -198,17 +238,37 @@ export default function TherapyBotPage() {
         {/* Right Column: Conversational Chat */}
         <div className="flex flex-col border border-border rounded-2xl bg-card shadow-sm overflow-hidden h-[600px] lg:h-auto">
           {/* Header */}
-          <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/10">
+          <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/10 flex-wrap gap-2">
             <div>
               <h1 className="text-sm font-semibold text-foreground">Talk to Niva</h1>
               <p className="text-xs text-muted-foreground">HerWay&apos;s gentle, supportive companion for your thoughts</p>
             </div>
-            <Link
-              href="/cases"
-              className="text-xs text-primary hover:underline font-medium"
-            >
-              My Cases →
-            </Link>
+            <div className="flex items-center gap-2">
+              {caseId ? (
+                <Link
+                  href={`/cases/${caseId}`}
+                  className="text-xs text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 px-2.5 py-1 rounded-md font-medium hover:bg-purple-100 transition-colors"
+                >
+                  ← Back to Case
+                </Link>
+              ) : messages.some((m) => m.role === 'user') ? (
+                <button
+                  type="button"
+                  onClick={handleSaveAsCase}
+                  disabled={isPromoting}
+                  className="text-xs text-primary bg-primary/10 border border-primary/30 px-2.5 py-1 rounded-md font-medium hover:bg-primary/20 transition-colors disabled:opacity-50"
+                >
+                  {isPromoting ? 'Creating case…' : '✨ Save as Guided Case'}
+                </button>
+              ) : (
+                <Link
+                  href="/cases"
+                  className="text-xs text-primary hover:underline font-medium"
+                >
+                  My Cases →
+                </Link>
+              )}
+            </div>
           </div>
 
           {/* Messages scroll area */}

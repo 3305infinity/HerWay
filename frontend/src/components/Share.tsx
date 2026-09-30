@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from './ui/button';
-import { ShareIcon } from 'lucide-react';
+import { ShareIcon, Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import axios from 'axios';
 
@@ -11,7 +12,9 @@ interface ShareProps {
 }
 
 function Share({ imageURL, resText, setShared }: ShareProps) {
+  const router = useRouter();
   const [encodedImage, setEncodedImage] = React.useState<string>('');
+  const [isSavingCase, setIsSavingCase] = useState(false);
   const handleCommonFunction = async () => {
     // decode api - img as url (main branch)
     // decompose - generated text
@@ -54,8 +57,30 @@ function Share({ imageURL, resText, setShared }: ShareProps) {
     setShared(true);
   };
 
+  const handleSaveToCase = async () => {
+    setIsSavingCase(true);
+    try {
+      await handleCommonFunction();
+      const res = await axios.post('/api/v2/cases', {
+        user_id: 'anonymous',
+        situation_text: resText,
+        category: 'safety',
+        title: `Discreet Report: ${resText.slice(0, 35)}`,
+      });
+      if (res.status === 200 || res.status === 201) {
+        const newCase = res.data;
+        const id = newCase.id || newCase._id;
+        router.push(`/cases/${id}`);
+      }
+    } catch (e) {
+      console.error('Failed to create case from discreet report:', e);
+    } finally {
+      setIsSavingCase(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col items-center gap-4">
       {/* Adjusted Image size */}
       <div className="relative w-[500px] h-[500px]">
         <Image
@@ -67,34 +92,38 @@ function Share({ imageURL, resText, setShared }: ShareProps) {
         />
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 flex-wrap justify-center">
         <Button
           variant="default"
+          className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+          onClick={handleSaveToCase}
+          disabled={isSavingCase}
+        >
+          <Sparkles size={20} />
+          <span>{isSavingCase ? 'Creating case…' : 'Save as Guided Safety Case'}</span>
+        </Button>
+        <Button
+          variant="outline"
           className="flex items-center gap-2"
           onClick={handleShareTelegram}
         >
-          <ShareIcon size={24} />
+          <ShareIcon size={20} />
           Share on Telegram
         </Button>
         <Button
-          variant="default"
-          className="flex items-center gap-2 bg-black text-white"
+          variant="outline"
+          className="flex items-center gap-2 bg-black text-white hover:bg-black/90 hover:text-white"
           onClick={handleShareTwitter}
         >
-          <ShareIcon size={24} />
+          <ShareIcon size={20} />
           Share on Twitter
         </Button>
         <Button
-          variant="default"
-          // instagram colors
+          variant="outline"
           className="flex items-center gap-2 bg-gradient-to-r from-[#405DE6] to-[#5851DB] text-white"
         >
-          <ShareIcon size={24} />
+          <ShareIcon size={20} />
           Share on Instagram
-        </Button>
-        <Button variant="default" className="flex items-center gap-2">
-          <ShareIcon size={24} />
-          Share on Slack
         </Button>
       </div>
     </div>

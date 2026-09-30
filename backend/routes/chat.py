@@ -33,6 +33,14 @@ class ChatRequest(BaseModel):
         default_factory=list,
         description='Previous messages as [{"role": "user"|"assistant", "content": "..."}]',
     )
+    mode: Optional[str] = Field(
+        None,
+        description=(
+            "Optional mode context: 'therapy' (emotional support via Niva/TherapyBot), "
+            "'legal' (legal Q&A via LawBot), or None (general case chat). "
+            "This nudges ChatAgent's grounding context without changing its tool set."
+        ),
+    )
 
 
 class ChatResponse(BaseModel):
@@ -61,11 +69,19 @@ async def chat(request: ChatRequest):
             pass
 
     if not case_obj:
-        # Fallback dummy case context for general inquiries
+        # Build a context-appropriate fallback case for standalone LawBot / TherapyBot sessions
+        mode_context = ""
+        if request.mode == "therapy":
+            mode_context = "[Emotional support session with Niva. User may be in distress.] "
+        elif request.mode == "legal":
+            mode_context = "[Legal information session via LawBot. Focus on Indian law and rights.] "
+
         case_obj = Case(
             user_id="anonymous",
-            situation_text=request.message,
-            title="General Inquiry",
+            situation_text=f"{mode_context}{request.message}",
+            title="General Inquiry" if not request.mode else (
+                "Therapy Support Session" if request.mode == "therapy" else "Legal Information Session"
+            ),
         )
 
     try:

@@ -19,6 +19,7 @@ export const fetchCityName = async (lat: number, lng: number) => {
   }
 };
 
-export function cleanText(text: string) {
-  return text.replace(/\s?\(.*?\)/g, '').trim(); // Removes anything inside parentheses
+export function cleanText(text?: string | null) {
+  if (!text) return '';
+  return String(text).replace(/\s?\(.*?\)/g, '').trim(); // Removes anything inside parentheses
 }
