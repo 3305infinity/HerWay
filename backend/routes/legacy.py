@@ -11,15 +11,17 @@ They will be migrated or deprecated in future iterations.
 from __future__ import annotations
 
 import base64
+import io
 import json
 import logging
 import os
 
 import boto3
 from bson import ObjectId
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from backend.auth import Identity, require_authenticated
 from backend.db import get_database, upload_embeddings_to_mongo
 from backend.schema import FileContent, PostInfo
 from backend.utils.common import (
@@ -119,48 +121,111 @@ async def decompose_text_content(data: dict):
         raise HTTPException(status_code=500, detail=f"Error decomposing text: {e}")
 
 
+#: Keys the community post form is allowed to write. Previously the whole
+#: request body was inserted verbatim, so a caller could set arbitrary fields
+#: (including ``_id`` or ``status``) on the public community collection.
+_ALLOWED_POST_FIELDS = {
+    "Name",
+    "Location",
+    "Frequency of domestic violence",
+    "Relationship with perpetrator",
+    "Severity of domestic violence",
+    "Nature of domestic violence",
+    "Impact on children",
+    "Culprit details",
+    "Other info",
+}
+
+
 @router.post("/save-extracted-data")
 async def save_extracted_data(data: dict):
+    """Save an anonymous community post.
+
+    Only the known form fields are stored, and ``status`` is set server-side.
+    Contact details are deliberately not persisted — the community feed is
+    public, and a stored phone number would eventually be exposed.
+    """
+    if not isinstance(data, dict) or not data:
+        raise HTTPException(status_code=400, detail="No post content supplied.")
+
+    document = {
+        key: str(value)[:2000]
+        for key, value in data.items()
+        if key in _ALLOWED_POST_FIELDS and value not in (None, "")
+    }
+    if not document:
+        raise HTTPException(
+            status_code=400,
+            detail="The post was empty after validation. Please fill in the form fields.",
+        )
+
+    document["status"] = "pending"
+
     try:
-        _db()["admin"].insert_one(data)
-        return {"status": "Data saved successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error saving data: {e}")
+        result = _db()["admin"].insert_one(document)
+        return {"status": "Data saved successfully", "id": str(result.inserted_id)}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error saving community post")
+        raise HTTPException(status_code=503, detail="Your post could not be saved right now.")
 
 
 @router.post("/encode")
 async def encode_text_in_image_endpoint(
     text: str, img_url: str = None, file: UploadFile = File(None)
 ):
-    """Encode text into an image."""
+    """Encode text into an image.
+
+    Kept for backward compatibility. New clients should use
+    ``POST /api/v2/discreet/encode``, which also reports capacity limits and
+    the honest limitations of steganography.
+
+    The response is streamed from memory. The previous implementation wrote
+    every result to a single shared ``encoded_image.png`` on disk, so two
+    concurrent users could be handed each other's private message, and the
+    file was left behind afterwards.
+    """
     try:
         image = load_image_from_url_or_file(img_url, file)
         encoded_image = encode_text_in_image(image, text)
-        output_path = "encoded_image.png"
-        encoded_image.save(output_path, format="PNG")
+        buf = io.BytesIO()
+        encoded_image.save(buf, format="PNG")
+        buf.seek(0)
         return StreamingResponse(
-            open(output_path, "rb"),
+            buf,
             media_type="image/png",
-            headers={"Content-Disposition": "attachment; filename=encoded_image.png"},
+            headers={"Content-Disposition": "attachment; filename=photo.png"},
         )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error encoding text in image: {e}"
-        )
+        logger.exception("Legacy encode failed")
+        raise HTTPException(status_code=500, detail="Could not encode the message into that image.")
 
 
 @router.post("/decode")
 async def decode_text_from_image_endpoint(
     img_url: str = None, file: UploadFile = File(None)
 ):
-    """Decode text from an image."""
+    """Decode text from an image.
+
+    Kept for backward compatibility; see ``POST /api/v2/discreet/decode``.
+    """
     try:
         image = load_image_from_url_or_file(img_url, file)
-        return {"decoded_text": decode_text_from_image(image)}
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error decoding text from image: {e}"
-        )
+        decoded = decode_text_from_image(image)
+        return {
+            "decoded_text": decoded,
+            "found": bool(decoded),
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Legacy decode failed")
+        raise HTTPException(status_code=400, detail="Could not read that image.")
 
 
 @router.get("/poem-generation")
@@ -184,63 +249,134 @@ async def send_message_to_twitter_endpoint(image_url: str, caption: str):
         )
 
 
+# Fields on a community post that identify the person who wrote it or the way
+# to reach them. The community feed is public, so these must never be returned
+# by a public endpoint — publishing a survivor's phone number or email is a
+# direct safety risk.
+_PRIVATE_POST_FIELDS = {
+    "contact info",
+    "contact_info",
+    "phone",
+    "email",
+    "preferred way of contact",
+    "preferred_contact_method",
+    "culprit_embedding",
+    "embedding",
+    "user_id",
+}
+
+
+def _public_post(post: dict) -> dict:
+    """Strip contact and identifying fields from a community post."""
+    serialized = serialize_object_id(post)
+    return {
+        k: v
+        for k, v in serialized.items()
+        if k.lower().strip() not in _PRIVATE_POST_FIELDS
+    }
+
+
 @router.get("/get-admin-posts")
 def get_all_posts():
-    """Retrieve all posts from the database."""
+    """Retrieve community posts with contact details removed."""
     try:
-        posts = [serialize_object_id(post) for post in _db()["admin"].find()]
+        posts = [_public_post(post) for post in _db()["admin"].find()]
         return JSONResponse(content=posts)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving posts: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error retrieving community posts")
+        raise HTTPException(
+            status_code=503, detail="Community posts could not be loaded right now."
+        )
 
 
 @router.get("/find-match")
 def find_top_matching_posts(info: str, collection: str):
-    """Find top matches based on embedding similarity."""
+    """Find top matches based on embedding similarity.
+
+    The collection is restricted to a known allow-list; it used to be taken
+    verbatim from the query string, which let a caller read any collection in
+    the database, including ``cases``.
+    """
+    if collection not in {"admin", "complains2"}:
+        raise HTTPException(status_code=400, detail="Unknown collection")
     try:
         description_vector = generate_text_embedding(info)
         top_matches = find_top_matches(_db()[collection], description_vector)
-        return [serialize_object_id(match) for match in top_matches]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error finding matches: {e}")
+        return [_public_post(match) for match in top_matches]
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error finding matches")
+        raise HTTPException(status_code=503, detail="Matching is unavailable right now.")
 
 
 @router.get("/get-post/{post_id}")
 def get_post_by_id(post_id: str):
-    """Retrieve a specific post by its ID."""
+    """Retrieve a specific community post, with contact details removed."""
     try:
-        post = _db()["admin"].find_one({"_id": ObjectId(post_id)})
-        if not post:
-            raise HTTPException(status_code=404, detail="Post not found")
-        return JSONResponse(content=serialize_object_id(post))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving post by ID: {e}")
+        obj_id = ObjectId(post_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid post ID")
+
+    try:
+        post = _db()["admin"].find_one({"_id": obj_id})
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error retrieving post by ID")
+        raise HTTPException(status_code=503, detail="That post could not be loaded right now.")
+
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return JSONResponse(content=_public_post(post))
 
 
 @router.post("/close-issue/{issue_id}")
-async def close_issue(issue_id: str):
-    """Mark an issue as closed by updating its status."""
+async def close_issue(issue_id: str, identity: Identity = Depends(require_authenticated)):
+    """Mark an issue as closed. Restricted to signed-in users.
+
+    This was previously open to anyone, so any visitor could close any
+    survivor's open case report.
+    """
+    try:
+        obj_id = ObjectId(issue_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid issue ID")
+
     try:
         result = _db()["admin"].update_one(
-            {"_id": ObjectId(issue_id)},
-            {"$set": {"status": "closed"}},
+            {"_id": obj_id},
+            {"$set": {"status": "closed", "closed_by": identity.owner_id}},
         )
-        if result.modified_count == 0:
-            raise HTTPException(status_code=404, detail="Issue not found or already closed")
-        return {"status": "Issue marked as closed"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error closing issue: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error closing issue")
+        raise HTTPException(status_code=503, detail="Could not update that issue right now.")
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    return {"status": "Issue marked as closed"}
 
 
 @router.post("/upload_embeddings/")
-async def upload_embeddings():
-    """Upload embeddings to MongoDB."""
+async def upload_embeddings(identity: Identity = Depends(require_authenticated)):
+    """Rebuild the legal-document embedding index.
+
+    Requires a signed-in user: it is an expensive admin operation that calls
+    the embedding API once per document, and was previously open to anyone.
+    """
     try:
         file_contents = read_files_from_directory("backend/docs")
         upload_embeddings_to_mongo(file_contents)
-        return {"message": "Embeddings uploaded successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error uploading embeddings: {e}")
+        return {"message": "Embeddings uploaded successfully", "documents": len(file_contents)}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="No documents directory found to index.")
+    except Exception:
+        logger.exception("Error uploading embeddings")
+        raise HTTPException(status_code=503, detail="Embedding upload failed.")
 
 
 @router.post("/generate-image")

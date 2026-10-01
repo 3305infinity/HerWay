@@ -149,6 +149,13 @@ class SearchVertical(str, Enum):
 SearchType = SearchVertical
 
 
+#: HerWay serves Indian users, so every search defaults to the India locale
+#: unless a caller deliberately overrides it.  Using the US locale (the previous
+#: default) returned US helplines and US legal procedure for Indian situations.
+DEFAULT_COUNTRY = "in"
+DEFAULT_LANGUAGE = "en"
+
+
 class SearchRequest(BaseModel):
     """Search request model explaining WHY a search is being made."""
     query: str
@@ -156,13 +163,47 @@ class SearchRequest(BaseModel):
     reason: str = Field(..., description="Explanation of why this search is necessary")
     priority: str = Field("medium", description="high | medium | low")
     location: Optional[str] = None
-    country: Optional[str] = "us"
-    language: Optional[str] = "en"
+    country: Optional[str] = DEFAULT_COUNTRY
+    language: Optional[str] = DEFAULT_LANGUAGE
     num_results: int = 10
     page: int = 1
 
 
 SearchIntent = SearchRequest
+
+
+class SearchFailureReason(str, Enum):
+    """Why a search produced no usable results.
+
+    The UI must be able to tell "we searched and found nothing" apart from
+    "the search never ran", so that it never shows fake successful research.
+    """
+    NONE = "none"                      # Search succeeded
+    NOT_CONFIGURED = "not_configured"  # No SerpApi key present
+    TIMEOUT = "timeout"                # Network timeout after retries
+    RATE_LIMITED = "rate_limited"      # HTTP 429
+    AUTH_FAILED = "auth_failed"        # HTTP 401 / 403 — bad or exhausted key
+    HTTP_ERROR = "http_error"          # Other non-2xx response
+    NETWORK_ERROR = "network_error"    # DNS / connection failure
+    MALFORMED_RESPONSE = "malformed_response"  # 200 but unparseable body
+    UPSTREAM_ERROR = "upstream_error"  # SerpApi returned an "error" field
+
+
+class SearchOutcome(BaseModel):
+    """Result of a single search, including an explicit success/failure signal."""
+    vertical: str
+    query: str
+    success: bool
+    results: List["SearchResult"] = Field(default_factory=list)
+    failure_reason: SearchFailureReason = SearchFailureReason.NONE
+    error_message: Optional[str] = None
+    latency_ms: float = 0.0
+    from_cache: bool = False
+
+    @property
+    def is_empty_but_successful(self) -> bool:
+        """True when the search ran correctly but genuinely matched nothing."""
+        return self.success and not self.results
 
 
 class SearchResult(BaseModel):
@@ -383,11 +424,30 @@ class EvidenceItem(BaseModel):
 # Local Resource Discovery Models
 # ---------------------------------------------------------------------------
 
+class ResourceVerification(str, Enum):
+    """How much we actually know about a resource's provenance.
+
+    HerWay must never present an unchecked map listing as a "verified"
+    government service — a woman acting on a wrong address or phone number in
+    a crisis is a real harm.
+    """
+    #: Resolved from an official .gov.in / .nic.in domain or an official registry.
+    OFFICIAL_SOURCE = "official_source"
+    #: Strong signals (official domain suffix, government keywords in the name)
+    #: but not confirmed against a primary registry.
+    LIKELY_OFFICIAL = "likely_official"
+    #: A third-party listing (e.g. Google Maps) that we have not corroborated.
+    UNVERIFIED_LISTING = "unverified_listing"
+
+
 class LocalResource(BaseModel):
     """Normalized local physical resource found via Maps / Local search."""
     id: str = Field(default_factory=lambda: f"res_{datetime.utcnow().timestamp()}")
     name: str = Field(..., description="Name of institution, court, office, or center")
-    type: str = Field(..., description="e.g. Consumer Court, Police Station, Cyber Support, Legal Aid")
+    type: str = Field(
+        "Support service",
+        description="e.g. Consumer Court, Police Station, Cyber Support, Legal Aid",
+    )
     address: Optional[str] = None
     phone: Optional[str] = None
     rating: Optional[float] = None
@@ -398,13 +458,40 @@ class LocalResource(BaseModel):
     source_url: Optional[str] = None
     source_domain: Optional[str] = None
     retrieved_at: datetime = Field(default_factory=datetime.utcnow)
-    is_verified_gov_or_ngo: bool = Field(False, description="True if official government, police, court, or verified NGO")
+    verification: ResourceVerification = Field(
+        ResourceVerification.UNVERIFIED_LISTING,
+        description="Provenance of this listing — never claim more than we checked",
+    )
+    verification_note: str = Field(
+        "",
+        description="Plain-English explanation of why this resource carries its verification level",
+    )
     relevance_reason: str = Field("", description="Why this local resource is relevant to the case")
+
+    @property
+    def is_verified_gov_or_ngo(self) -> bool:
+        """Backward-compatible flag for callers written against the old field."""
+        return self.verification in (
+            ResourceVerification.OFFICIAL_SOURCE,
+            ResourceVerification.LIKELY_OFFICIAL,
+        )
 
 
 # ---------------------------------------------------------------------------
 # Final Research Report
 # ---------------------------------------------------------------------------
+
+class ResearchDegradation(BaseModel):
+    """A part of the research pipeline that did not complete.
+
+    Surfaced to the user verbatim so a partial result is never presented as a
+    complete one (e.g. "web results are current, but the nearby-centre search
+    failed").
+    """
+    stage: str = Field(..., description="web_search | news_search | local_search | verification | safety_plan")
+    reason: str = Field(..., description="Machine-readable reason code")
+    user_message: str = Field(..., description="Plain-English explanation safe to show the user")
+
 
 class FinalResearchReport(BaseModel):
     """Complete research report handed to the Action Planner."""
@@ -419,6 +506,12 @@ class FinalResearchReport(BaseModel):
     metrics: Optional[ResearchMetrics] = None
     unique_domains: List[str] = Field(default_factory=list)
     official_domains: List[str] = Field(default_factory=list)
+    #: Non-empty when some stage failed. The case still succeeds; the UI shows
+    #: exactly what is missing rather than pretending the research was whole.
+    degradations: List[ResearchDegradation] = Field(default_factory=list)
+    location_used: Optional[str] = Field(
+        None, description="Location string actually used for local search; None if the user gave none"
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

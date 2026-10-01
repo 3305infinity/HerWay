@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { Button } from './ui/button';
 import {
   CircleX,
-  Nfc,
   CalendarDays,
   FileUser,
   PersonStanding,
@@ -19,6 +18,9 @@ import {
 } from 'lucide-react';
 import CustomTimeline from './Timeline';
 import toast from 'react-hot-toast';
+import { ErrorState } from './States';
+import { apiGet, apiPost } from '@/lib/api';
+import type { CaseRecord } from '@/lib/types';
 
 interface Post {
   _id: string;
@@ -43,26 +45,19 @@ function PostDetail({ id }: { id: string }) {
   const [city, setCity] = useState<string | null>(null);
   const [isCreatingCase, setIsCreatingCase] = useState(false);
 
-  useEffect(() => {
-    const fetchPostById = async () => {
-      try {
-        const response = await fetch(`/api/postbyid/${id}`);
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch post');
-        }
-
-        const data = await response.json();
-        setPost(data);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : 'An unknown error occurred'
-        );
-      }
-    };
-
-    fetchPostById();
+  const fetchPostById = React.useCallback(async () => {
+    setError(null);
+    const result = await apiGet<Post>(`/api/postbyid/${id}`);
+    if (result.ok) {
+      setPost(result.data);
+    } else {
+      setError(result.error.message);
+    }
   }, [id]);
+
+  useEffect(() => {
+    void fetchPostById();
+  }, [fetchPostById]);
 
   useEffect(() => {
     if (post) {
@@ -83,7 +78,22 @@ function PostDetail({ id }: { id: string }) {
   }, [post]);
 
   if (error) {
-    return <div>Error: {error}</div>;
+    return (
+      <div className="max-w-md mx-auto p-6">
+        <ErrorState
+          title="We could not load this post"
+          message={error}
+          onRetry={() => void fetchPostById()}
+        >
+          <Link
+            href="/community"
+            className="px-4 py-2 rounded-lg border border-border text-foreground text-sm font-medium hover:bg-muted transition-colors"
+          >
+            Back to community
+          </Link>
+        </ErrorState>
+      </div>
+    );
   }
 
   if (!post) {
@@ -95,7 +105,13 @@ function PostDetail({ id }: { id: string }) {
   }
   const cleanLoc = cleanText(post.Location);
   const [lat, lng] = cleanLoc.split(',').map(Number);
-  const mapUrl = `https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_MAP_KEY}&q=${lat},${lng}`;
+  const mapKey = process.env.NEXT_PUBLIC_MAP_KEY;
+  // Without a key, or without real coordinates, the embed renders a Google
+  // error page. Show an honest placeholder instead.
+  const mapUrl =
+    mapKey && Number.isFinite(lat) && Number.isFinite(lng)
+      ? `https://www.google.com/maps/embed/v1/place?key=${mapKey}&q=${lat},${lng}`
+      : null;
 
   const handleCloseIssue = async (issueId: string) => {
     try {
@@ -135,29 +151,22 @@ function PostDetail({ id }: { id: string }) {
         .filter(Boolean)
         .join('. ');
 
-      const res = await fetch('/api/v2/cases', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: 'anonymous',
-          situation_text: summary || 'Reported situation from community post',
-          category: 'domestic_violence',
-          location: post.Location ? { display_name: cleanText(post.Location) } : null,
-          title: `Case from Report: ${cleanText(post.Name || 'Community Incident').slice(0, 40)}`,
-        }),
+      const result = await apiPost<CaseRecord>('/api/v2/cases', {
+        situation_text: summary || 'Situation described in a community post.',
+        category: 'domestic_violence',
+        location: post.Location ? { display_name: cleanText(post.Location) } : null,
+        title: 'Started from a community post',
       });
 
-      if (res.ok) {
-        const newCase = await res.json();
-        const caseId = newCase.id || newCase._id;
-        toast.success('Guided Safety Case created!');
-        router.push(`/cases/${caseId}`);
+      if (result.ok) {
+        toast.success('Your private case has been created.');
+        router.push(`/cases/${result.data.id}`);
       } else {
-        toast.error('Failed to create case');
+        toast.error(result.error.message);
+        setIsCreatingCase(false);
       }
     } catch {
-      toast.error('Error creating case');
-    } finally {
+      toast.error('We could not create the case. Please try again.');
       setIsCreatingCase(false);
     }
   };
@@ -211,14 +220,9 @@ function PostDetail({ id }: { id: string }) {
         </div>
       </div>
       <div className="grid grid-cols-3 gap-3 mt-5">
-        <div className="max-w-sm w-full rounded-md border flex flex-col gap-3 border-gray-400 p-3">
-          <div className="flex items-center justify-between w-full gap-5">
-            <h2 className="text-lg font-semibold">Preferred way of contact</h2>
-            <Nfc className="text-gray-700" />
-          </div>
-          <p>{post['Preferred way of contact']}</p>
-          <p>{post['Contact info']}</p>
-        </div>
+        {/* Contact details are intentionally never rendered here. The
+            community feed is public, and publishing a survivor's phone number
+            or email would put them at risk. The API strips these fields too. */}
         <div className="max-w-sm w-full rounded-md border flex flex-col gap-3 border-gray-400 p-3">
           <div className="flex items-center justify-between w-full gap-5">
             <h2 className="text-lg font-semibold">
@@ -267,18 +271,27 @@ function PostDetail({ id }: { id: string }) {
         </div>
       </div>
       <div className="flex items-center w-full mt-5 gap-3">
-        <div className="rounded-md w-full p-1 border border-gray-400">
-          <iframe
-            width="100%"
-            height="360"
-            className="rounded-md border border-gray-300"
-            style={{ border: 0 }}
-            loading="lazy"
-            allowFullScreen
-            referrerPolicy="no-referrer-when-downgrade"
-            src={mapUrl}
-          ></iframe>
-        </div>
+        {mapUrl ? (
+          <div className="rounded-md w-full p-1 border border-gray-400">
+            <iframe
+              title="Approximate location"
+              width="100%"
+              height="360"
+              className="rounded-md border border-gray-300"
+              style={{ border: 0 }}
+              loading="lazy"
+              allowFullScreen
+              referrerPolicy="no-referrer-when-downgrade"
+              src={mapUrl}
+            />
+          </div>
+        ) : (
+          <div className="rounded-md w-full h-[370px] p-4 border border-gray-400 flex items-center justify-center">
+            <p className="text-sm text-muted-foreground text-center">
+              No map is available for this post.
+            </p>
+          </div>
+        )}
         <div className="rounded-md h-[370px] w-full p-4 border border-gray-400">
           <h1 className="text-center text-lg font-semibold mb-4">
             Recent Activities

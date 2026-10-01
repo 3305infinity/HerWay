@@ -4,6 +4,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from groq import Groq
 
+from backend.services.llm_service import DEFAULT_MODEL
 from backend.prompts import (INSPIRATION_POEM_PROMPT,
                              USER_POST_TEXT_DECOMPOSITION_PROMPT,
                              USER_POST_TEXT_EXPANSION_PROMPT)
@@ -14,7 +15,7 @@ load_dotenv()
 async def expand_user_text_using_gemini(user_input):
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel(DEFAULT_MODEL)
     response = model.generate_content(
         f"{USER_POST_TEXT_EXPANSION_PROMPT}. The data is {user_input}"
     )
@@ -58,7 +59,7 @@ def text_to_image(user_input):
 
 def decompose_user_text(user_input):
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel(DEFAULT_MODEL)
     response = model.generate_content(
         f"{USER_POST_TEXT_DECOMPOSITION_PROMPT}. The data is {user_input}"
     )
@@ -68,7 +69,7 @@ def decompose_user_text(user_input):
 def create_poem(user_input):
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-    model = genai.GenerativeModel("gemini-1.5-flash-8b")
+    model = genai.GenerativeModel(DEFAULT_MODEL)
     response = model.generate_content(
         f"{INSPIRATION_POEM_PROMPT}. The data is {user_input}"
     )

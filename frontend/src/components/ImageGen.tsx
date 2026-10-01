@@ -48,7 +48,6 @@ export default function ImageGen({
   });
 
   const [imageOptions, setImageOptions] = useState<string[] | null>(null); // To hold the array of image URLs
-  const [selectedImage, setSelectedImage] = useState<string | null>(null); // To store the selected image
   const [isLoading, setIsLoading] = useState<boolean>(false); // Loading state for images
   const [selectedText, setSelectedText] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>(''); // Default model
@@ -78,8 +77,8 @@ export default function ImageGen({
   };
 
   const handleImageSelect = (imageUrl: string) => {
-    setSelectedImage(imageUrl); // Set the selected image as final
-    setResImage(imageUrl); // Update the parent component with the final image URL
+    // The parent owns the selection and advances the stepper.
+    setResImage(imageUrl);
   };
 
   const handleTextOptionClick = (text: string) => {

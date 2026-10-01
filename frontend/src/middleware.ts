@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server';
 import { clerkMiddleware } from '@clerk/nextjs/server';
+import { isClerkConfigured } from '@/lib/clerk-config';
 
-const pubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-const isValidClerkKey =
-  typeof pubKey === 'string' &&
-  (pubKey.startsWith('pk_test_') || pubKey.startsWith('pk_live_')) &&
-  !pubKey.includes('your_');
-
-export default isValidClerkKey
-  ? clerkMiddleware()
-  : () => NextResponse.next();
+/**
+ * Clerk's middleware is only mounted when the keys actually belong to a Clerk
+ * project. Running it with a key for an instance that does not exist makes
+ * Clerk answer every request with `{"errors":[{"message":"Invalid host"}]}`,
+ * which breaks the whole site rather than just sign-in.
+ *
+ * `isClerkConfigured` is the same check `next.config.ts` uses to decide whether
+ * to alias the Clerk SDK to the local stand-ins, so the two cannot disagree.
+ */
+export default isClerkConfigured() ? clerkMiddleware() : () => NextResponse.next();
 
 export const config = {
   matcher: [

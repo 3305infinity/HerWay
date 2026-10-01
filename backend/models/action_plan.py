@@ -15,10 +15,24 @@ from pydantic import BaseModel, Field
 
 
 class ActionPriority(str, Enum):
+    """Priority of an action.
+
+    Two vocabularies are accepted. The ``*_TERM`` names express *when* a step
+    belongs in a research-driven action plan; ``HIGH``/``MEDIUM``/``LOW``
+    express *how urgent* a step is in a safety plan. Both are supported so that
+    ``SafetyActionItem`` and ``ActionItem`` can share this type, and so that
+    documents already stored in MongoDB keep validating.
+    """
+
     IMMEDIATE = "immediate"     # Do this first / today
     SHORT_TERM = "short_term"   # Within the next few days
     MEDIUM_TERM = "medium_term" # Within weeks
     ONGOING = "ongoing"         # Recurring / background
+
+    # Urgency-style aliases used by the Safety Plan.
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
 
 
 class ActionStatus(str, Enum):

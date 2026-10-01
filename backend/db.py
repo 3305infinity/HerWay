@@ -164,52 +164,80 @@ _mongo_attempted = False
 
 
 def _seed_sample_data(db):
-    """Seed initial sample records for community and docs if empty."""
+    """Seed illustrative community records for local development only.
+
+    These are clearly marked as samples and carry **no contact details** —
+    seeding plausible-looking email addresses or phone numbers into a domestic
+    violence product risks them being read as real people to contact. Disable
+    entirely with ``HERWAY_SEED_SAMPLE_DATA=false``.
+    """
     admin_col = db["admin"]
     if admin_col.count_documents({}) == 0:
         sample_posts = [
             {
                 "_id": ObjectId("660000000000000000000001"),
-                "Name": "Anonymous Sister",
-                "Location": "28.6139, 77.2090",
-                "Preferred way of contact": "Text message",
-                "Contact info": "discreet-channel@proton.me",
+                "Name": "Anonymous (sample post)",
+                "Location": "Delhi",
                 "Frequency of domestic violence": "Weekly",
                 "Relationship with perpetrator": "Spouse",
                 "Severity of domestic violence": "High",
                 "Nature of domestic violence": "Verbal abuse, intimidation, and financial control",
                 "Impact on children": "Anxiety and fear at home",
-                "Culprit details": "Tall male, age 38, controls finances and mobile phone",
-                "Other info": "Reached out to Sakhi One Stop Centre and found temporary accommodation. There is hope.",
+                "Culprit details": "Not described",
+                "Other info": (
+                    "Sample post for local development. Reached out to a Sakhi One Stop "
+                    "Centre and found temporary accommodation."
+                ),
                 "status": "pending",
+                "is_sample": True,
             },
             {
                 "_id": ObjectId("660000000000000000000002"),
-                "Name": "Anonymous Sister",
-                "Location": "19.0760, 72.8777",
-                "Preferred way of contact": "Email",
-                "Contact info": "private-support@safehaven.org",
+                "Name": "Anonymous (sample post)",
+                "Location": "Mumbai, Maharashtra",
                 "Frequency of domestic violence": "Daily",
                 "Relationship with perpetrator": "In-laws",
                 "Severity of domestic violence": "Medium",
-                "Nature of domestic violence": "Isolation, harassment over dowry demands",
+                "Nature of domestic violence": "Isolation and harassment over dowry demands",
                 "Impact on children": "None",
-                "Culprit details": "Mother-in-law and brother-in-law",
-                "Other info": "Filed an application under Section 12 PWDVA with legal aid advocate.",
+                "Culprit details": "Not described",
+                "Other info": (
+                    "Sample post for local development. Filed an application under the "
+                    "Protection of Women from Domestic Violence Act, 2005 with a legal aid advocate."
+                ),
                 "status": "closed",
+                "is_sample": True,
             },
         ]
         for p in sample_posts:
             admin_col.insert_one(p)
 
 
+def _is_production() -> bool:
+    return os.getenv("HERWAY_ENV", "").strip().lower() == "production"
+
+
+def database_mode() -> str:
+    """Report which store is backing the app: 'mongodb' or 'in-memory'.
+
+    Exposed on /health so an operator can see at a glance that cases are not
+    actually being persisted.
+    """
+    if db_client is not None:
+        return "mongodb"
+    if _in_memory_db is not None:
+        return "in-memory"
+    return "uninitialised"
+
+
 def get_database():
     """
-    Connect to MongoDB. Tries MONGO_ENDPOINT or MONGODB_URI with a 1.5s timeout.
-    If MongoDB is reachable, returns the real MongoDB database.
-    If MongoDB is unavailable (e.g. local mongod not running), falls back
-    to an in-memory database store so the app never hangs or crashes with
-    ServerSelectionTimeoutError.
+    Connect to MongoDB (MONGO_ENDPOINT or MONGODB_URI) with a short timeout.
+
+    When MongoDB is unreachable the app falls back to an in-memory store so a
+    developer is not blocked. **This fallback loses all data on restart**, so it
+    is refused outright when ``HERWAY_ENV=production``: a woman returning to a
+    saved safety plan and finding it gone is worse than a clear outage.
     """
     global db_client, _in_memory_db, _mongo_attempted
 
@@ -224,28 +252,46 @@ def get_database():
         uri = os.getenv("MONGO_ENDPOINT") or os.getenv("MONGODB_URI")
         if uri:
             try:
-                # Fast timeout (1.5s) to avoid 30-second freezing
                 client = MongoClient(
                     uri,
-                    serverSelectionTimeoutMS=1500,
-                    connectTimeoutMS=1500,
-                    socketTimeoutMS=2000,
+                    serverSelectionTimeoutMS=int(os.getenv("MONGO_TIMEOUT_MS", "4000")),
+                    connectTimeoutMS=int(os.getenv("MONGO_TIMEOUT_MS", "4000")),
+                    socketTimeoutMS=int(os.getenv("MONGO_SOCKET_TIMEOUT_MS", "8000")),
+                    retryWrites=True,
                 )
                 client.admin.command("ping")
                 db_client = client
-                logger.info("Connected to MongoDB successfully (%s)", uri.split("@")[-1])
+                logger.info("Connected to MongoDB (%s)", uri.split("@")[-1])
                 return db_client["SheBuilds"]
             except Exception as exc:
+                if _is_production():
+                    logger.critical("MongoDB is unreachable in production: %s", exc)
+                    raise RuntimeError(
+                        "Cannot reach MongoDB. Refusing to serve requests from a "
+                        "volatile in-memory store in production, because saved "
+                        "cases would be silently lost."
+                    ) from exc
                 logger.warning(
                     "MongoDB connection could not be established (%s). "
-                    "Falling back to resilient in-memory database store for development.",
+                    "Falling back to an IN-MEMORY store. Data will NOT persist "
+                    "across restarts. Set MONGODB_URI for real persistence.",
                     exc,
                 )
+        elif _is_production():
+            raise RuntimeError(
+                "MONGODB_URI (or MONGO_ENDPOINT) must be set when HERWAY_ENV=production."
+            )
+        else:
+            logger.warning(
+                "No MONGODB_URI/MONGO_ENDPOINT configured. Using an IN-MEMORY store; "
+                "data will NOT persist across restarts."
+            )
 
     if _in_memory_db is None:
         _in_memory_db = _InMemoryDatabase("SheBuilds")
-        _seed_sample_data(_in_memory_db)
-        logger.info("In-memory database store initialized with seed records.")
+        if os.getenv("HERWAY_SEED_SAMPLE_DATA", "true").strip().lower() != "false":
+            _seed_sample_data(_in_memory_db)
+        logger.info("In-memory database store initialized.")
 
     return _in_memory_db
 

@@ -6,13 +6,11 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 interface HavenAvatarProps {
   isSpeaking?: boolean;
-  emotion?: 'calm' | 'listening' | 'speaking' | 'supportive';
   className?: string;
 }
 
 export default function HavenAvatar({
   isSpeaking = false,
-  emotion = 'calm',
   className = '',
 }: HavenAvatarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -126,7 +124,7 @@ export default function HavenAvatar({
     window.addEventListener('pointermove', handlePointerMove);
 
     // 6. Smooth Animation Loop
-    let clock = new THREE.Clock();
+    const clock = new THREE.Clock();
     let blinkTimer = 0;
     let isBlinking = false;
     let blinkProgress = 0;

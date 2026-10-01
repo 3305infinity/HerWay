@@ -3,8 +3,11 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { MessageSquare, Shield, Search, Plus, ExternalLink, Sparkles } from 'lucide-react';
+import { ExternalLink, Plus, Search, Shield, Sparkles } from 'lucide-react';
 import { cleanText } from '@/lib/utils';
+import { EmptyState, ErrorState, InlineError, LoadingState } from '@/components/States';
+import { apiGet, apiPost } from '@/lib/api';
+import type { CaseRecord } from '@/lib/types';
 
 interface CommunityPost {
   _id: string;
@@ -27,62 +30,63 @@ export default function CommunityPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
   const [creatingCaseForId, setCreatingCaseForId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [caseError, setCaseError] = useState<string | null>(null);
+
+  const loadPosts = React.useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+
+    const result = await apiGet<CommunityPost[]>('/api/getPosts');
+    if (result.ok && Array.isArray(result.data)) {
+      setPosts(result.data);
+    } else {
+      // A failed fetch must not look like an empty community.
+      setLoadError(
+        result.ok ? 'The community feed came back in an unexpected form.' : result.error.message,
+      );
+    }
+    setIsLoading(false);
+  }, []);
 
   useEffect(() => {
-    async function loadPosts() {
-      try {
-        const res = await fetch('/api/getPosts');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            setPosts(data);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load community posts:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    loadPosts();
-  }, []);
+    void loadPosts();
+  }, [loadPosts]);
 
   const handleCreateCaseFromPost = async (post: CommunityPost) => {
     setCreatingCaseForId(post._id);
-    try {
-      const situationSummary = [
-        post['Nature of domestic violence'] ? `Situation: ${cleanText(post['Nature of domestic violence'])}` : '',
-        post['Severity of domestic violence'] ? `Severity: ${cleanText(post['Severity of domestic violence'])}` : '',
-        post['Other info'] ? `Details: ${cleanText(post['Other info'])}` : '',
-      ]
-        .filter(Boolean)
-        .join('. ');
+    setCaseError(null);
 
-      const res = await fetch('/api/v2/cases', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: 'anonymous',
-          situation_text: situationSummary || 'Seeking guidance based on shared community experience.',
-          category: 'domestic_violence',
-          location: post.Location ? { display_name: cleanText(post.Location) } : null,
-          title: `Case from Community: ${cleanText(post['Nature of domestic violence'] || 'Shared Experience').slice(0, 40)}`,
-        }),
-      });
+    const situationSummary = [
+      post['Nature of domestic violence'] ? `Situation: ${cleanText(post['Nature of domestic violence'])}` : '',
+      post['Severity of domestic violence'] ? `Severity: ${cleanText(post['Severity of domestic violence'])}` : '',
+      post['Other info'] ? `Details: ${cleanText(post['Other info'])}` : '',
+    ]
+      .filter(Boolean)
+      .join('. ');
 
-      if (res.ok) {
-        const newCase = await res.json();
-        const id = newCase.id || newCase._id;
-        router.push(`/cases/${id}`);
-      } else {
-        // Fallback: route to home intake with prefill
-        router.push(`/?starter=${encodeURIComponent(situationSummary)}`);
-      }
-    } catch {
-      router.push('/');
-    } finally {
-      setCreatingCaseForId(null);
+    const text = situationSummary || 'Seeking guidance based on a shared community experience.';
+
+    // Routed through the Next proxy. The old relative call had no matching
+    // route, so this button 404'd and dropped the user on the homepage with
+    // nothing carried over.
+    const result = await apiPost<CaseRecord>('/api/v2/cases', {
+      situation_text: text,
+      category: 'domestic_violence',
+      location: post.Location ? { display_name: cleanText(post.Location) } : null,
+      title: `Started from a community post`,
+    });
+
+    if (result.ok) {
+      router.push(`/cases/${result.data.id}`);
+      return;
     }
+
+    // Fall back to the intake form with the text preserved — the homepage
+    // now actually reads this parameter.
+    setCaseError(`${result.error.message} Taking you to the start page with your text kept.`);
+    setCreatingCaseForId(null);
+    router.push(`/?starter=${encodeURIComponent(text)}`);
   };
 
   const filteredPosts = posts.filter((p) => {
@@ -212,12 +216,20 @@ export default function CommunityPage() {
 
       {/* ── Community Posts Grid ── */}
       <div className="max-w-5xl mx-auto w-full p-4 sm:p-6 flex-1">
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-44 bg-muted/40 rounded-2xl animate-pulse border border-border" />
-            ))}
+        {caseError && (
+          <div className="mb-4">
+            <InlineError message={caseError} onDismiss={() => setCaseError(null)} />
           </div>
+        )}
+
+        {isLoading ? (
+          <LoadingState label="Loading shared experiences" rows={4} />
+        ) : loadError ? (
+          <ErrorState
+            title="We could not load the community feed"
+            message={loadError}
+            onRetry={() => void loadPosts()}
+          />
         ) : filteredPosts.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredPosts.map((post) => {
@@ -298,26 +310,40 @@ export default function CommunityPage() {
             })}
           </div>
         ) : (
-          <div className="text-center py-16 space-y-4 max-w-md mx-auto">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto text-muted-foreground">
-              <MessageSquare size={24} />
+          <EmptyState
+            title={
+              searchQuery || selectedSeverity !== 'all'
+                ? 'No posts matched your filters'
+                : 'No experiences shared yet'
+            }
+            message={
+              searchQuery || selectedSeverity !== 'all'
+                ? 'Try different words, or clear the filters to see everything.'
+                : 'Be the first to share an anonymous experience and help other women.'
+            }
+          >
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              {(searchQuery || selectedSeverity !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSelectedSeverity('all');
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 border border-border text-foreground text-xs font-medium rounded-xl hover:bg-muted transition-colors"
+                >
+                  Clear filters
+                </button>
+              )}
+              <Link
+                href="/create-post"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-xs font-medium rounded-xl hover:bg-primary/90 transition-colors"
+              >
+                <Plus size={14} />
+                <span>Share anonymously</span>
+              </Link>
             </div>
-            <div className="space-y-1">
-              <h2 className="text-base font-semibold text-foreground">No experiences found</h2>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {searchQuery
-                  ? 'No posts matched your search. Try different terms or clear the filter.'
-                  : 'Be the first to share an anonymous experience and help other women.'}
-              </p>
-            </div>
-            <Link
-              href="/create-post"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-xs font-medium rounded-xl hover:bg-primary/90 transition-colors"
-            >
-              <Plus size={14} />
-              <span>Share Anonymously</span>
-            </Link>
-          </div>
+          </EmptyState>
         )}
       </div>
     </div>

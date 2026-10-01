@@ -1,16 +1,19 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import HavenAvatar from '@/components/HavenAvatar';
+import { InlineError } from '@/components/States';
+import { apiPost } from '@/lib/api';
+import type { CaseRecord, ChatReply } from '@/lib/types';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  /** True when this bubble reports a failure rather than carrying a real reply. */
+  failed?: boolean;
 }
-
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
 const SUGGESTIONS = [
   'I am feeling overwhelmed and need help calming down.',
@@ -19,7 +22,7 @@ const SUGGESTIONS = [
   'I just need someone safe to listen right now.',
 ];
 
-export default function TherapyBotPage() {
+function TherapyBotPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // When opened from a Case Workspace (/therapybot?case_id=xxx), Niva has
@@ -38,6 +41,7 @@ export default function TherapyBotPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto scroll messages to bottom
@@ -106,67 +110,65 @@ export default function TherapyBotPage() {
     setMessages(newHistory);
     setIsLoading(true);
 
-    try {
-      const res = await fetch(`${API_BASE}/api/v2/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          // Pass case_id for case-grounded therapy support when available
-          ...(caseId ? { case_id: caseId } : {}),
-          // mode='therapy' nudges ChatAgent towards emotional support tooling
-          mode: 'therapy',
-          history: newHistory.slice(-6).map((m) => ({ role: m.role, content: m.content })),
-        }),
-      });
+    setError(null);
 
-      if (res.ok) {
-        const data = await res.json();
-        const reply = data.reply || "I am here with you. Take your time, you are safe.";
-        setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
-        speakText(reply);
-      } else {
-        throw new Error('Chat API returned non-200');
-      }
-    } catch {
-      // Gentle supportive fallback response
-      let fallback =
-        "Thank you for sharing that with me. It takes courage to open up. Please take things one step at a time, remember that you are not alone, and if you are ever in immediate danger, please reach out to emergency services or call 112.";
-      if (text.toLowerCase().includes('breath') || text.toLowerCase().includes('calm')) {
-        fallback =
-          "Let's take a slow breath together. Inhale through your nose for 4 seconds… hold gently for 4… and exhale slowly through your mouth for 6. Feel your shoulders drop. You are doing well.";
-      }
-      setMessages((prev) => [...prev, { role: 'assistant', content: fallback }]);
-      speakText(fallback);
-    } finally {
-      setIsLoading(false);
+    const result = await apiPost<ChatReply>('/api/v2/chat', {
+      message: text,
+      // Pass case_id for case-grounded support when available
+      ...(caseId ? { case_id: caseId } : {}),
+      // mode='therapy' keeps Niva supportive and stops legal escalation
+      mode: 'therapy',
+      history: newHistory.slice(-8).map((m) => ({ role: m.role, content: m.content })),
+    });
+
+    if (result.ok && result.data.reply) {
+      setMessages((prev) => [...prev, { role: 'assistant', content: result.data.reply }]);
+      speakText(result.data.reply);
+    } else {
+      // Niva does not invent a reply when the service is down. The previous
+      // version emitted a scripted "supportive" message that was visually
+      // identical to a real answer, so a user in distress could not tell that
+      // nobody had actually responded to what she said.
+      const detail = result.ok
+        ? 'Niva did not reply this time.'
+        : result.error.message;
+      setError(detail);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            'I am having trouble replying right now — this is a connection problem, not ' +
+            'anything you did. What you wrote has not been lost.\n\n' +
+            'If you need to talk to someone now, Tele-MANAS is free and available 24 hours ' +
+            'on 14416. In an emergency, call 112.',
+          failed: true,
+        },
+      ]);
     }
+    setIsLoading(false);
   };
 
   const handleSaveAsCase = async () => {
     const userMsgs = messages.filter((m) => m.role === 'user').map((m) => m.content);
     if (userMsgs.length === 0 || isPromoting) return;
+
     setIsPromoting(true);
-    try {
-      const situation = userMsgs.join('. ');
-      const res = await fetch(`${API_BASE}/api/v2/cases`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: 'anonymous',
-          situation_text: situation,
-          category: 'safety',
-          title: `Emotional Support Case: ${situation.slice(0, 40)}`,
-        }),
-      });
-      if (res.ok) {
-        const newCase = await res.json();
-        const id = newCase.id || newCase._id;
-        router.push(`/cases/${id}`);
-      }
-    } catch (err) {
-      console.error('Failed to save therapy session as case:', err);
-    } finally {
+    setError(null);
+
+    const situation = userMsgs.join('. ');
+    // Ownership comes from the session, not from a hardcoded "anonymous" —
+    // which previously meant saved sessions never appeared in My cases.
+    const result = await apiPost<CaseRecord>('/api/v2/cases', {
+      situation_text: situation,
+      category: 'other_women_safety',
+      title: `From a conversation with Niva: ${situation.slice(0, 40)}`,
+    });
+
+    if (result.ok) {
+      router.push(`/cases/${result.data.id}`);
+    } else {
+      setError(result.error.message);
       setIsPromoting(false);
     }
   };
@@ -231,7 +233,10 @@ export default function TherapyBotPage() {
           </div>
 
           <div className="p-3 rounded-xl border border-border bg-muted/20 text-xs text-muted-foreground leading-relaxed">
-            💡 <strong>Privacy Note:</strong> This conversation is private and trauma-informed. You can use the Quick Exit button in the top navigation at any time.
+            <strong>Privacy:</strong> this conversation is private to you and is not shared.
+            Press <kbd className="px-1 py-0.5 rounded border border-border bg-background text-[10px]">Esc</kbd>{' '}
+            at any time to leave immediately — though that cannot erase your browser history.{' '}
+            <Link href="/privacy" className="text-primary hover:underline">What this does and does not protect</Link>
           </div>
         </div>
 
@@ -276,9 +281,11 @@ export default function TherapyBotPage() {
             {messages.map((msg, idx) => (
               <div
                 key={idx}
-                className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
                   msg.role === 'user'
                     ? 'bg-primary text-primary-foreground ml-auto rounded-br-xs'
+                    : msg.failed
+                    ? 'bg-rose-500/10 border border-rose-500/30 text-foreground mr-auto rounded-bl-xs'
                     : 'bg-muted/50 border border-border text-foreground mr-auto rounded-bl-xs'
                 }`}
               >
@@ -294,6 +301,12 @@ export default function TherapyBotPage() {
             )}
             <div ref={messagesEndRef} />
           </div>
+
+          {error && (
+            <div className="px-3 pt-2">
+              <InlineError message={error} onDismiss={() => setError(null)} />
+            </div>
+          )}
 
           {/* Quick prompt suggestions */}
           <div className="px-4 py-2 border-t border-border bg-muted/10 flex gap-2 overflow-x-auto no-scrollbar">
@@ -336,5 +349,14 @@ export default function TherapyBotPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Page() {
+  // useSearchParams requires a Suspense boundary during static rendering.
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading…</div>}>
+      <TherapyBotPage />
+    </Suspense>
   );
 }

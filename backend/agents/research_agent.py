@@ -99,8 +99,12 @@ class ResearchAgent:
             f"Recommended verticals: {situation.recommended_research_types}\n"
         )
 
+        # See ResearchOrchestrator.plan_research — a class body cannot read a
+        # name it is also assigning, so this default must be bound outside it.
+        _default_case_id = case_id
+
         class _PlanWrapper(ResearchPlan):
-            case_id: str = case_id  # type: ignore[assignment]
+            case_id: str = _default_case_id
 
         plan = await self._llm.structured_generate(
             system_prompt=_PLANNER_SYSTEM_PROMPT,

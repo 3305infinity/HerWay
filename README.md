@@ -1,477 +1,606 @@
 <div align="center">
 
-# 🛡️ Haven  
-### *A Silent Shield, A Strong Voice — AI-Powered Women's Safety & Autonomous Real-World Case Resolution*
+# HerWay
+
+### *A Silent Shield, A Strong Voice — AI-powered women's safety and real-world case resolution for India*
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Next.js](https://img.shields.io/badge/Next.js-14.2-black.svg?style=flat&logo=next.js&logoColor=white)](https://nextjs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-15.0-black.svg?style=flat&logo=next.js&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue.svg?style=flat&logo=python&logoColor=white)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-blue.svg?style=flat&logo=python&logoColor=white)](https://python.org)
 [![MongoDB Atlas](https://img.shields.io/badge/MongoDB-Atlas%20Vector%20Search-47A248.svg?style=flat&logo=mongodb&logoColor=white)](https://mongodb.com)
-[![SerpApi](https://img.shields.io/badge/SerpApi-Live%20Search%20Engine-4285F4.svg?style=flat)](https://serpapi.com)
-[![Google Gemini](https://img.shields.io/badge/Google-Gemini%20Flash%20%2F%20Pro-8E75C2.svg?style=flat&logo=google&logoColor=white)](https://ai.google.dev)
+[![SerpApi](https://img.shields.io/badge/SerpApi-Live%20Search-4285F4.svg?style=flat)](https://serpapi.com)
+[![Google Gemini](https://img.shields.io/badge/Google-Gemini%20Flash-8E75C2.svg?style=flat&logo=google&logoColor=white)](https://ai.google.dev)
+[![Tests](https://img.shields.io/badge/tests-140%20passing-brightgreen.svg?style=flat)](#-testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-**Haven** is an end-to-end, trauma-informed AI platform built to empower women navigating dangerous, abusive, or legally complex situations. It unifies **discreet safety channels**, **autonomous real-world investigation powered by live search**, **RAG-grounded legal guidance**, **3D empathetic therapy with voice**, **anonymous community peer support**, and **living safety & action plans**.
+**HerWay** is a trauma-informed platform for women in India navigating unsafe,
+abusive, or legally complex situations. It combines **discreet communication**,
+**live research against official sources**, **grounded legal information**,
+**emotional support**, **anonymous peer community**, and **living safety plans**
+that persist across visits.
 
-[**Explore Architecture**](#-system-architecture) • [**Quick Start**](#-quick-start--installation) • [**Feature Tour**](#-core-capabilities--feature-deep-dive) • [**Bi-Directional Integration**](#-bi-directional-case-integration) • [**API Reference**](#-api-reference)
+[**Architecture**](#-system-architecture) • [**Quick Start**](#-quick-start) • [**Features**](#-core-capabilities) • [**API**](#-api-reference) • [**Design principles**](#-design-principles)
 
 ---
 
 </div>
 
-## 🌟 Vision & Problem Statement
+## 🌟 The problem
 
-Globally, **1 in 3 women** experiences physical, emotional, or sexual abuse in her lifetime. In crisis and coercive-control scenarios:
-- **Digital Surveillance is Rampant**: Perpetrators routinely monitor browser history, text messages, phone logs, and app lists, making direct calls for help hazardous.
-- **Access to Legal & Mental Health Support is Constrained**: Less than 14% of survivors have access to timely legal aid, and only 10% receive trauma-informed mental health assistance.
-- **Information Overload & Misinformation**: In a crisis, survivors face generic or outdated advice rather than verified local shelter contacts, jurisdiction-specific statutes (e.g., PWDVA, POSH, IPC/BNS), and step-by-step safety roadmaps.
+Globally **1 in 3 women** experiences physical, emotional, or sexual abuse. In
+coercive-control situations three things compound the danger:
 
-### The Unified Haven Architecture
-Haven seamlessly bridges two complementary layers into a unified product experience:
-1. **The Women-Centric Safety Shield (Original Haven)**: LSB steganographic distress transmission hidden inside everyday photos, 3D animated empathetic companion (Niva), RAG-powered Indian legal guidance (LawBot), anonymous community shared experiences, dual Gemini+Gemma formal report generation, inspirational poetry, and emergency quick-exit switches.
-2. **Autonomous Real-World Problem Resolution (v2 Agent Pipeline)**: A multi-agent search and synthesis engine powered by **live SerpApi** that analyzes distress narratives, autonomously queries web/news/local/maps sources, verifies domain authority, and builds living safety plans with persistent case workspaces.
-3. **Bi-Directional Case Bridges**: Any standalone tool (LawBot, TherapyBot, Community, Discreet Message) can be promoted into an active Guided Case with one click, and any Case Workspace pre-loads context into LawBot, Niva, and community search.
+- **Devices are monitored.** Browser history, messages and app lists are
+  routinely checked, so asking for help directly is hazardous.
+- **Support is hard to reach.** Legal aid and trauma-informed mental health
+  services exist in India but are poorly signposted and vary by district.
+- **Generic advice is dangerous.** A survivor needs *her* district's One Stop
+  Centre and *current* procedure — not a blog post, and not a US helpline.
+
+### How HerWay is built
+
+1. **Safety shield** — LSB steganographic messages hidden in ordinary photos, a
+   3D empathetic companion (Niva), RAG-grounded Indian legal information
+   (LawBot), anonymous community experiences, formal report drafting, and a
+   global quick exit.
+2. **Research pipeline** — a multi-agent engine that reads a situation,
+   decides *whether* a search is needed, queries live sources through SerpApi,
+   scores source authority, and assembles a safety plan with a persistent case
+   workspace.
+3. **Bi-directional bridges** — any standalone tool can be promoted into a
+   Guided Case, and any case pre-loads its context into LawBot, Niva and
+   community search.
 
 ---
 
-## 🏗️ System Architecture
+## 🧭 Design principles
+
+These are enforced in code and asserted in tests, not aspirations.
+
+| Principle | What it means in practice |
+|---|---|
+| **Never invent a fact** | No phone number, address, section number or deadline appears unless it came from a source. When research fails, HerWay says so rather than answering from model memory. |
+| **Show provenance, always** | Every resource is labelled `official_source`, `likely_official`, or `unverified_listing` — with a plain-English reason. A Google Maps pin is never presented as a confirmed government service. |
+| **Partial is not complete** | If the web search succeeds but the nearby-centre search fails, the UI says exactly that. A partial result is never displayed as a whole one. |
+| **Safety mandates are absolute** | Plans never suggest confronting the person causing harm. Evidence-gathering steps always carry an "only if it is safe" caveat. |
+| **India-first** | `gl=in`, Indian statutes (PWDVA 2005, POSH Act 2013, BNS/IPC, IT Act), Indian helplines only, `.nic.in` recognised as government. Never assumes a city. |
+| **The server decides who you are** | Case ownership is resolved from a verified session, never from a client-supplied `user_id`. |
+| **Claims must be accurate** | Quick Exit is described as what it is — an immediate redirect that *cannot* erase browser history. See [`/privacy`](frontend/src/app/privacy/page.tsx). |
+
+---
+
+## 🏗️ System architecture
 
 ```mermaid
 flowchart TB
-    subgraph Client["Unified Frontend (Next.js 14 App Router)"]
-        UI_Nav["Unified Navigation Shell (Navbar with Quick Exit ESC)"]
-        UI_Home["Homepage & Guided Intake (/page.tsx)"]
-        UI_Case["Case Workspace & Living Safety Plan (/cases/[id])"]
-        UI_Law["Legal Rights Advisor (/lawbot)"]
-        UI_Therapy["3D Empathetic Avatar Niva (/therapybot)"]
-        UI_Community["Anonymous Community (/community & /post/[id])"]
-        UI_Stego["Discreet SOS Stego Studio (/create-post)"]
-        UI_Admin["Authority Incident Dashboard (/dashboard)"]
+    subgraph Client["Frontend — Next.js 15 App Router"]
+        UI_Nav["Navigation shell + Quick Exit (ESC)"]
+        UI_Home["Homepage & guided intake (/)"]
+        UI_Case["Case workspace & safety plan (/cases/[id])"]
+        UI_Law["Legal information (/lawbot)"]
+        UI_Therapy["Niva, 3D companion (/therapybot)"]
+        UI_Community["Community (/community, /post/[id])"]
+        UI_Stego["Discreet message (/discreet-message)"]
+        UI_Privacy["Privacy & limits (/privacy)"]
     end
 
-    subgraph Bridges["Bi-Directional Integration Layer"]
-        B_Law["LawBot ↔ Case Context & Promotion"]
-        B_Therapy["TherapyBot ↔ Living Safety Plan"]
-        B_Comm["Community ↔ Case Creation ('Start case from this')"]
-        B_Stego["Stego Share ↔ Save as Guided Safety Case"]
+    subgraph Proxy["Next.js API proxy (/api/v2/*)"]
+        P_Note["Same-origin · attaches Clerk token server-side · forwards session cookie"]
     end
 
-    subgraph Gateway["FastAPI API Gateway (Port 8000)"]
-        R_V2_Research["/api/v2/research/* (Autonomous Multi-Agent Pipeline)"]
-        R_V2_Cases["/api/v2/cases/* (CRUD & Safety Assessment)"]
-        R_V2_Chat["/api/v2/chat (Case-Aware Tool-Calling Assistant)"]
-        R_Legacy["Root Endpoints (/encode, /decode, /text-generation, /find-match, etc.)"]
+    subgraph Gateway["FastAPI backend (port 8000)"]
+        R_Cases["/api/v2/cases/*"]
+        R_Research["/api/v2/research/*"]
+        R_Chat["/api/v2/chat"]
+        R_Discreet["/api/v2/discreet/*"]
+        R_Resources["/api/v2/resources/*"]
+        R_Legacy["Root endpoints (/encode, /get-admin-posts, …)"]
+        R_Auth["auth.py — Clerk JWKS + isolated anonymous sessions"]
     end
 
-    subgraph AgenticPipeline["Autonomous Research & Resolution Engine"]
-        Agent_Sit["1. Situation Understanding Agent"]
-        Agent_Plan["2. Research Planning Agent"]
-        Agent_Serp["3. Live SerpApi Service (Web / News / Local / Maps)"]
-        Agent_Verif["4. Source Verification & Trust Analysis Agent"]
-        Agent_Action["5. Action Planning & Synthesis Agent"]
-        Agent_Chat["6. ChatAgent (Tool Loop: LawBot, Stego, Community, Reports)"]
+    subgraph Pipeline["Research & resolution engine"]
+        A_Sit["1. Situation Agent"]
+        A_Plan["2. Research Orchestrator (budget, dedup, routing)"]
+        A_Serp["3. SerpApi Service (web / news / maps)"]
+        A_Verify["4. Source Verifier (India-first authority)"]
+        A_Action["5. Action Planner"]
+        A_Safety["6. Safety Plan Agent (6 phases)"]
+        A_Chat["7. ChatAgent (tool loop)"]
     end
 
-    subgraph ServiceLayer["Reusable Service Wrappers (Zero Duplication)"]
-        S_Embed["EmbeddingService (Atlas Vector Search RAG)"]
-        S_Report["ReportService (Dual LLM Formal Reports & Poetry)"]
-        S_Steg["StegService (LSB Image Steganography)"]
-        S_Serp["SerpApiService (Live Google Search Client)"]
+    subgraph Services["Service wrappers"]
+        S_Embed["EmbeddingService — Atlas vector search"]
+        S_Report["ReportService — formal reports & poems"]
+        S_Steg["StegService — LSB steganography"]
+        S_India["india_resources — attributed registry"]
     end
 
-    subgraph DataAI["AI, Knowledge & Storage Services"]
-        DB_Mongo[(MongoDB Atlas / Vector Search)]
-        AI_Gemini["Google Gemini (Flash / Pro)"]
-        AI_Gemma["Gemma Text Expansion Fallback"]
-        Ext_SerpApi["SerpApi Live Search Engine"]
+    subgraph Data["AI, knowledge & storage"]
+        DB[(MongoDB / Atlas Vector Search)]
+        AI_Gemini["Google Gemini"]
+        Ext_Serp["SerpApi"]
     end
 
-    UI_Nav --> UI_Home & UI_Case & UI_Law & UI_Therapy & UI_Community & UI_Stego
-    UI_Home -->|Intake Narrative| R_V2_Cases
-    UI_Case -->|Fetch Case / Tool Chat| R_V2_Cases & R_V2_Chat
-    UI_Law -->|Legal Q&A & Case Bridge| B_Law --> R_V2_Chat & R_Legacy
-    UI_Therapy -->|Voice Chat & Case Bridge| B_Therapy --> R_V2_Chat
-    UI_Community -->|Search & Start Case| B_Comm --> R_Legacy & R_V2_Cases
-    UI_Stego -->|Encode & Save Case| B_Stego --> R_Legacy & R_V2_Cases
+    UI_Nav --> UI_Home & UI_Case & UI_Law & UI_Therapy & UI_Community & UI_Stego & UI_Privacy
+    UI_Home & UI_Case & UI_Law & UI_Therapy & UI_Community & UI_Stego --> Proxy
+    Proxy --> R_Cases & R_Research & R_Chat & R_Discreet & R_Resources & R_Legacy
+    R_Cases & R_Research & R_Chat --> R_Auth
 
-    R_V2_Research --> Agent_Sit
-    Agent_Sit --> Agent_Plan
-    Agent_Plan --> Agent_Serp
-    Agent_Serp -->|Live HTTP Queries| Ext_SerpApi
-    Agent_Serp --> Agent_Verif
-    Agent_Verif --> Agent_Action
-    Agent_Action --> DB_Mongo
-
-    Agent_Chat --> S_Embed & S_Report & S_Steg & S_Serp
-    S_Embed --> DB_Mongo
-    S_Report --> AI_Gemini & AI_Gemma
-    S_Steg --> R_Legacy
-    S_Serp --> Ext_SerpApi
+    R_Research --> A_Sit --> A_Plan --> A_Serp
+    A_Serp -->|live HTTP| Ext_Serp
+    A_Serp --> A_Verify --> A_Action --> A_Safety --> DB
+    R_Chat --> A_Chat --> S_Embed & S_Report & S_Steg
+    A_Safety --> S_India
+    S_Embed --> DB
+    A_Sit & A_Verify & A_Action & A_Safety & A_Chat --> AI_Gemini
 ```
 
 ---
 
-## 🚀 Core Capabilities & Feature Deep-Dive
+## 🚀 Core capabilities
 
-### 1. 🔍 Autonomous Real-World Case Resolution (Powered by SerpApi)
-When a user describes a situation (*"My landlord locked me out illegally while my abusive partner is threatening me in Austin, TX"*), Haven dispatches an autonomous 5-stage research sequence:
+### 1. Research pipeline
 
-```
-[User Situation Narrative] 
-   │
-   ├──► [Stage 1: Situation Understanding]
-   │       • Extracts core facts, urgency (Low/Medium/High/Critical), jurisdiction, timeline, missing context
-   │
-   ├──► [Stage 2: Research Planning]
-   │       • Generates targeted search queries across Web, News, Local Shelters, and Maps
-   │
-   ├──► [Stage 3: Live SerpApi Execution]
-   │       • Executes live HTTP queries (no hallucinated phone numbers or addresses)
-   │       • Normalizes results into structured domain models (title, url, domain, snippet, rating, address)
-   │
-   ├──► [Stage 4: Source Verification & Trust Scoring]
-   │       • Classifies domains: Official Government (.gov), Legal Aid (.org), Medical/Crisis vs General
-   │       • Performs cross-source consensus verification and flags conflicting claims
-   │
-   └──► [Stage 5: Action Planning & Workspace Generation]
-           • Synthesizes immediate safety steps, legal avenues, emergency contacts, local resources
-           • Persists active case to MongoDB with interactive checklist tracking
-```
-
-#### Key Modules:
-- **`SerpApiService`** (`backend/services/serpapi_service.py`): Typed client supporting `search_web()`, `search_news()`, `search_local()`, and `search_maps()` with retries, timeout management, parameter validation, and rate-limiting.
-- **`SourceVerifier`** (`backend/agents/source_verifier.py`): Calculates authority scores (0–100%), extracts verifiable citations, and surfaces official helpline numbers.
-- **`ActionPlanner`** (`backend/agents/action_planner.py`): Builds sequenced phases (`Immediate Safety (0–2 hrs)`, `Short-term Actions (24–48 hrs)`, `Follow-Up & Legal Steps`).
-
----
-
-### 2. 🗂️ Interactive Case Workspace & Living Safety Plan (`/cases/[id]`)
-A responsive command center designed for clarity during high-stress situations:
-
-| Tab / Element | Contents & Capabilities |
-| :--- | :--- |
-| **Header Quick-Links** | One-click access to **💜 Talk to Niva** (case-grounded), **⚖️ Legal Help** (case-grounded), **🔒 Discreet Message**, and **How we researched this**. |
-| **Safety / Action Plan Tab** | Interactive task checklist grouped by urgency. Users can mark steps done, track completion progress, and view safety warnings. |
-| **Sources & Evidence Tab** | Verified source cards with trust badges (Gov, Legal, Crisis), clickable links, mapped phone numbers, address info, and ratings. |
-| **Resources Tab** | Verified local crisis centers, One Stop Centres, and shelters with integrated SerpApi local maps search. |
-| **Community Tab** | Displays peer experiences from the Haven community matching the current case via vector similarity. |
-| **Interactive Assistant Drawer** | In-case conversational AI backed by `ChatAgent` with tool calling (`invoke_lawbot`, `search_community`, `encode_message`, `generate_formal_report`, `generate_poem`, `adapt_safety_plan`, `search_safety_resources`). |
-| **Research Trail Drawer** | Complete transparency drawer detailing exact search queries dispatched, query timestamps, raw SerpApi snippets, and verification scores. |
-
----
-
-### 3. ⚖️ Legal Rights & Constitution Advisor (`/lawbot`)
-- **Direct & Grounded Modes**:
-  - Standalone: Answers questions on Indian law, IPC/BNS sections, PWDVA 2005, POSH Act 2013, and consumer rights.
-  - Case-Aware: When opened via `/lawbot?case_id=xxx`, answers are grounded in the verified case evidence via ChatAgent's `invoke_lawbot` tool.
-- **Bi-Directional Case Promotion**: Users chatting with LawBot in standalone mode can click **"✨ Promote to Guided Case"** at any time to convert their legal inquiry into a structured case with an automated action plan.
-
----
-
-### 4. 🤖 3D Empathetic Therapy Avatar Niva (`/therapybot`)
-- **3D Real-Time Avatar**: Renders a 3D model (`/models/avatar.glb`) centered on face and shoulders using Three.js with mouse parallax tracking and graceful fallback.
-- **Trauma-Informed Voice & Synthesis**: Integrates browser speech synthesis with rate/pitch modulation for calming delivery, natural voice selection, and a one-click mute/stop control.
-- **Calming Interventions**: Guided 4-7-8 breathing exercises and supportive de-escalation dialogue.
-- **Bi-Directional Case Connection**:
-  - When linked with a case (`?case_id=xxx`), Niva has access to safety plan context and can trigger safety adaptations if the situation escalates.
-  - In standalone mode, users can click **"✨ Save as Guided Case"** to convert their emotional support session into an active safety plan.
-
----
-
-### 5. 🤝 Anonymous Community & Shared Experiences (`/community`)
-- **Safe Peer Support**: Survivors read anonymous experiences shared by women who navigated similar domestic or workplace challenges. All personal identifiers are protected.
-- **Search & Severity Filtering**: Real-time filtering by severity (High, Medium, Low) and keyword search.
-- **Bi-Directional Case Creation**: Every community post features a **"✨ Start case from this"** button, allowing a survivor to immediately launch their own private safety case pre-populated with relevant context.
-- **Post Details (`/post/[id]`)**: Detailed view with incident location mapped via Google Maps embed, activity timeline, and status tracking (pending/closed).
-
----
-
-### 6. 🖼️ Discreet SOS Steganography Studio (`/create-post`)
-Conceals help messages inside innocent photos (e.g., flowers, pets, food) before sharing them on social media or messaging platforms:
+A user writes *"I am being threatened by my partner and I don't know what to do"*
+(optionally with a city/district). HerWay runs:
 
 ```
-[Distress Keywords / Form] ──► [Gemini + Gemma Text Expansion] ──► [Formal Distress Report]
-                                              │
-                                              ▼
-[Upload Ordinary Photo] ──────► [LSB Pixel Steganography] ──────► [Visually Normal Photo]
-                                              │
-                                              ▼
-                             [Share on Socials / Save as Guided Case]
+[Situation narrative]
+   │
+   ├─► Situation Agent
+   │     Separates KNOWN FACT from USER CLAIM from UNKNOWN. Never promotes a
+   │     claim to a fact. Assigns category + urgency.
+   │
+   ├─► Research Orchestrator
+   │     Decides whether a search is needed at all, picks the vertical,
+   │     enforces a search budget (4 normal / 6 critical), scrubs PII from
+   │     queries, deduplicates, and runs tasks concurrently.
+   │
+   ├─► SerpApi Service
+   │     Live web / news / maps. Every failure mode is distinguished:
+   │     not_configured · timeout · rate_limited · auth_failed · http_error ·
+   │     malformed_response — so "no results" never looks like an outage.
+   │
+   ├─► Source Verifier
+   │     Score = 0.40·Authority + 0.25·Agreement + 0.20·Directness + 0.15·Freshness
+   │     India-first tiers: Govt of India > State > Police/Legal Services >
+   │     NGO > News > General web. Flags contradictions between sources.
+   │
+   ├─► Action Planner        — phased steps, each linked to the evidence behind it
+   └─► Safety Plan Agent     — six phases, for safety categories only
 ```
 
-- **LSB Steganography**: Encodes text into the least significant bits of pixel data using Pillow and NumPy without altering the visual appearance of the image.
-- **Anonymous Mode**: Distressed users can proceed anonymously without mandatory Clerk authentication.
-- **Dual Text Expansion**: Expands brief distress notes using dual Gemini and Gemma models for resilience.
-- **Bi-Directional Case Bridge**: Step 3 (`Share.tsx`) includes a **"✨ Save as Guided Safety Case"** button to automatically initialize an active case file.
+**Safety plan phases:** `Right now` · `Next 24 hours` · `Document — only if safe`
+· `Support network` · `Formal & legal options` · `Ongoing`.
+
+Assessment uses **explicit boolean indicators with quoted justifications** —
+never an arbitrary "risk: 87%" score.
+
+### 2. Case workspace (`/cases/[id]`)
+
+| Element | What it does |
+|---|---|
+| **Plan tab** | Interactive checklist by phase. Ticks are optimistic but roll back if the save fails — you never see a tick that wasn't persisted. |
+| **Sources tab** | Per-source cards: the claim supported, source type, domain, authority/relevance/freshness breakdown, and any conflicts. Answers *"why are you telling me this?"* |
+| **Resources tab** | Helplines and local services, each with its verification level. Live search for more, scoped to your district. |
+| **Community tab** | Peer experiences matched by vector similarity. Contact details never shown. |
+| **Ask HerWay** | Case-grounded assistant with tools: `search_web`, `search_news`, `search_local`, `invoke_lawbot`, `search_community`, `encode_message`, `generate_formal_report`, `adapt_safety_plan`, `search_safety_resources`, `update_action_status`. |
+| **Research trail** | Every query, which engine, how many results, how long, and which failed. Stage ticks come from what actually happened. |
+
+### 3. LawBot (`/lawbot`)
+
+Answers are labelled so you can judge them:
+
+> **Fact:** · **Legal information:** · **Possible option:** · **Needs verification:**
+
+Cites Acts by name and year; gives a section number **only** when a retrieved
+source states it. Always clear that this is legal information, not legal
+advice, and that free legal aid is available to women through DLSA/NALSA.
+Case-aware via `/lawbot?case_id=…`; "Save this as a case" works standalone.
+
+### 4. Niva (`/therapybot`)
+
+3D avatar (Three.js, `public/models/avatar.glb`) with browser speech synthesis
+and a calm fallback if WebGL is unavailable. In therapy mode the agent
+**does not escalate to legal steps or run searches** unless asked — it listens.
+Surfaces Tele-MANAS **14416** when relevant. Sessions can be saved as a case.
+
+### 5. Community (`/community`)
+
+Anonymous shared experiences with search and severity filters. **Contact
+details are stripped server-side** and never rendered. Every post offers
+"Start case from this".
+
+### 6. Discreet message (`/discreet-message`)
+
+```
+[Ordinary photo] + [your message]  ──►  LSB encode  ──►  [visually identical PNG]
+                                                              │
+[received photo]  ──►  LSB decode  ──►  [your message]  ◄──────┘
+```
+
+UTF-8 byte encoding, so **Hindi, Tamil, Bengali and other Indian scripts
+round-trip correctly**. Capacity is checked before encoding. Nothing is stored
+on the server.
+
+> **This is not encryption.** The page says so prominently. It hides a message
+> from a casual look. Someone technical can still find it, monitoring software
+> still sees you type it, and chat apps that re-compress photos destroy it —
+> send the file as a document attachment.
+
+### 7. Safety & privacy
+
+- **Quick Exit** — sticky button plus a global `ESC` listener, redirecting
+  immediately. The tooltip and [`/privacy`](frontend/src/app/privacy/page.tsx)
+  state plainly that it **cannot** erase browser history.
+- **Emergency banner** — 112, 181, 1091 across the safety-relevant pages.
+- **Anonymous by default** — no account required. Each browser gets its own
+  isolated session, so anonymous users cannot see each other's cases.
 
 ---
 
-### 7. 🚨 Safety & Emergency Features
-- **Global Quick Exit (`ESC`)**: Sticky button and global keyboard listener redirect immediately to Google (`https://www.google.com`).
-- **Emergency Helplines Banner**: Persistent display of official 24/7 helplines (**112** Police/Emergency, **181** Women Helpline, **1091** Women Police Desk) across Home, TherapyBot, and Community pages.
+## 🇮🇳 India-first behaviour
+
+| Area | Implementation |
+|---|---|
+| **Search locale** | `gl=in`, `hl=en`. Jurisdiction appended to queries when absent — a plain search for "women helpline 181" otherwise returns a UK helpline first. |
+| **Source authority** | `.gov.in` and `.nic.in` recognised as government (most Indian ministry portals are `.nic.in`). |
+| **Helplines** | 112 ERSS · 181 Women Helpline · 1091 Women Police · 1098 CHILDLINE · 1930 Cyber Crime · 14416 Tele-MANAS. Each entry in [`india_resources.py`](backend/india_resources.py) carries the government page documenting it. |
+| **Portals** | cybercrime.gov.in · SHe-Box · NCW · NALSA · One Stop Centre scheme · National Consumer Helpline · India Code. |
+| **Local search** | One Stop Centre (Sakhi), Mahila Thana, District Legal Services Authority, cyber crime cell, Swadhar Greh. |
+| **Location** | 28 states + 8 UTs dropdown, city, PIN validation. **Never assumes a city** — with no location, local search is skipped and the user is told. |
+| **Formatting** | `+91 98765 43210`, `1 October 2026`, INR with lakh/crore grouping. |
+
+What is **not** hardcoded: state helpline numbers, any street address, any
+office phone number, opening hours. Those are discovered live and labelled with
+their provenance.
 
 ---
 
-## 🔄 Bi-Directional Case Integration
+## 🔄 Bi-directional case integration
 
-Every core feature in Haven works both **independently** and **deeply integrated** with the Case Architecture:
-
-| Feature | Standalone Usage | Inside a Case Workspace | Reverse Bridge (Tool ➔ Case) |
-| :--- | :--- | :--- | :--- |
-| **LawBot** (`/lawbot`) | Ask any legal question directly. | Header button opens LawBot with case evidence pre-loaded. | **"Promote to Guided Case"** button creates case from chat. |
-| **TherapyBot** (`/therapybot`) | Calming 3D companion conversation. | Header button opens Niva with safety plan context. | **"Save as Guided Case"** button turns session into case. |
-| **Community** (`/community`) | Browse and filter shared stories. | Dedicated tab displays peer posts matching current case. | **"Start case from this"** button creates case from post. |
-| **Discreet Stego** (`/create-post`) | Hide help text in an image. | Header button opens stego creator; ChatAgent provides guide. | **"Save as Guided Safety Case"** button creates case on share. |
-| **Formal Reports** | Dual Gemini/Gemma expansion in form. | ChatAgent `generate_formal_report` tool drafts report. | Generated reports can be downloaded or saved to case. |
-| **Poem Generator** | Standalone `/poem-generation` route. | ChatAgent `generate_poem` tool provides words of strength. | Integrated directly into chat drawer. |
+| Feature | Standalone | Inside a case | Tool ➔ Case |
+|---|---|---|---|
+| **LawBot** | Ask any legal question | Opens with case evidence pre-loaded | "Save this as a case" |
+| **Niva** | Calm companion conversation | Opens with safety plan context | "Save as a case" |
+| **Community** | Browse and filter stories | Tab shows matching peer posts | "Start case from this" |
+| **Discreet message** | Hide text in an image | Linked from the case header | — |
+| **Formal reports** | — | `generate_formal_report` tool | Draft saved to the case |
 
 ---
 
-## 📂 Project Directory Structure
+## 📂 Project structure
 
 ```text
 Haven-main/
 ├── backend/
-│   ├── agents/                     # Autonomous AI Agents & Tool Registries
-│   │   ├── action_planner.py       # Synthesizes phased action plans & steps
-│   │   ├── chat_agent.py           # In-case assistant with full tool loop (LawBot, Stego, etc.)
-│   │   ├── research_agent.py       # Query generator & research coordinator
-│   │   ├── situation_agent.py      # Narrative decomposition & entity extraction
-│   │   └── source_verifier.py      # Domain authority & consensus scoring
-│   ├── routes/                     # FastAPI Endpoints
-│   │   ├── cases.py                # /api/v2/cases/* — Case CRUD & safety assessment
-│   │   ├── chat.py                 # /api/v2/chat — Case-aware conversational assistant
-│   │   ├── legacy.py               # Root endpoints — Stego, LawBot, posts, poems, images
-│   │   └── research.py             # /api/v2/research/* — Multi-stage research pipeline
-│   ├── services/                   # Core & External Services
-│   │   ├── embedding_service.py    # Wrapper for Atlas Vector Search RAG (search_legal_docs)
-│   │   ├── llm_service.py          # Unified LLM provider (Google Gemini Flash/Pro)
-│   │   ├── report_service.py       # Wrapper for formal report & poem generation
-│   │   ├── serpapi_service.py      # Robust SerpApi client (Web/News/Local/Maps)
-│   │   └── steganography_service.py# Wrapper for LSB pixel encode/decode
-│   ├── utils/                      # Low-level utilities
-│   │   ├── embedding.py            # Gemini text-embedding-004 & Atlas vector search
-│   │   ├── steganography.py        # LSB image encoding & decoding
-│   │   └── text_llm.py             # Dual Gemini/Gemma text expansion & poem generation
-│   ├── db.py                       # MongoDB connection & indexes
-│   ├── logger.py                   # Structured logging utility
-│   ├── main.py                     # FastAPI application entrypoint
-│   ├── models/                     # Pydantic schemas and domain models
-│   ├── requirements.txt            # Base backend dependencies
-│   └── requirements-v2.txt         # Enhanced agent & research dependencies
+│   ├── agents/
+│   │   ├── action_planner.py        # Phased, evidence-linked action plans
+│   │   ├── chat_agent.py            # Case assistant + tool loop
+│   │   ├── research_agent.py        # Query planning & concurrent execution
+│   │   ├── safety_plan_agent.py     # 6-phase adaptive safety plans
+│   │   ├── situation_agent.py       # Fact / claim / unknown separation
+│   │   └── source_verifier.py       # Authority scoring & contradiction detection
+│   ├── models/                      # Pydantic domain models
+│   │   ├── action_plan.py  case.py  research.py  safety_plan.py
+│   ├── routes/
+│   │   ├── cases.py                 # /api/v2/cases/*
+│   │   ├── chat.py                  # /api/v2/chat
+│   │   ├── discreet.py              # /api/v2/discreet/*   (encode / decode)
+│   │   ├── research.py              # /api/v2/research/*
+│   │   ├── resources.py             # /api/v2/resources/*  (helplines, regions)
+│   │   └── legacy.py                # Original root endpoints
+│   ├── services/
+│   │   ├── embedding_service.py     # Atlas vector search wrapper
+│   │   ├── llm_service.py           # Gemini client + error classification
+│   │   ├── maps_service.py          # India-specific local discovery
+│   │   ├── report_service.py        # Formal reports & poems
+│   │   ├── research_orchestrator.py # Budget, routing, dedup, quality loop
+│   │   ├── serpapi_service.py       # SerpApi client + failure taxonomy
+│   │   └── steganography_service.py
+│   ├── utils/                       # embedding · steganography · text_llm
+│   ├── auth.py                      # Clerk JWKS + anonymous session isolation
+│   ├── india_resources.py           # Attributed registry & source hierarchy
+│   ├── db.py  logger.py  main.py  prompts.py  schema.py
+│   ├── tests/                       # 140 tests
+│   └── requirements.txt
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                    # Next.js 14 App Router
-│   │   │   ├── cases/              # Case Workspace & Case List views
-│   │   │   │   ├── [id]/page.tsx   # 3-Column Interactive Case Workspace
-│   │   │   │   └── page.tsx        # Case History & Saved Cases
-│   │   │   ├── community/          # Anonymous Support Community feed & search
-│   │   │   ├── create-post/        # 3-Step Stego Studio & Post Submission
-│   │   │   ├── dashboard/          # Authority Incident Management
-│   │   │   ├── lawbot/             # AI Legal Advisor with Case Bridge
-│   │   │   ├── post/               # Post detail view ([id]) & redirect
-│   │   │   ├── therapybot/         # 3D Animated Therapy Avatar with Voice
-│   │   │   ├── layout.tsx          # Root Layout with Clerk Auth, Theme & Navbar
-│   │   │   └── page.tsx            # Main Landing & "What Happened?" Intake
-│   │   ├── components/             # Reusable UI Components
-│   │   │   ├── Navbar.tsx          # Unified Navigation with Quick Exit & Links
-│   │   │   ├── HavenAvatar.tsx     # Three.js 3D Avatar with lip-sync & fallback
-│   │   │   ├── PostDetail.tsx      # Community post view with 'Create Case' action
-│   │   │   ├── Share.tsx           # Stego sharing with 'Save as Case' action
-│   │   │   ├── InputForm.tsx       # Intake Form with Geolocation
-│   │   │   ├── ResearchTrailDrawer.tsx # Live search transparency drawer
-│   │   │   └── ui/                 # Accessible UI Primitives (Radix UI)
-│   │   ├── lib/                    # Client utilities (cleanText, fetchCityName, cn)
-│   ├── public/                     # 3D GLTF models (/models/avatar.glb), images
-│   ├── package.json                # Frontend dependencies & scripts
-│   └── tailwind.config.ts          # Styling & color tokens
+│   │   ├── app/
+│   │   │   ├── api/v2/[...path]/    # Proxy to the backend (same-origin)
+│   │   │   ├── cases/[id]/          # Case workspace
+│   │   │   ├── cases/               # Case list
+│   │   │   ├── community/           # Community feed
+│   │   │   ├── create-post/         # Share an experience
+│   │   │   ├── discreet-message/    # Encode / decode
+│   │   │   ├── lawbot/  therapybot/ post/[id]/  dashboard/
+│   │   │   ├── privacy/             # What this does and does not protect
+│   │   │   └── page.tsx             # Homepage & intake
+│   │   ├── components/
+│   │   │   ├── EvidenceCard.tsx     # Source transparency
+│   │   │   ├── ResourceCard.tsx     # Provenance-labelled resources
+│   │   │   ├── LocationPrompt.tsx   # State/UT/PIN picker
+│   │   │   ├── States.tsx           # Loading / empty / error / partial
+│   │   │   ├── HavenAvatar.tsx      # Three.js 3D companion
+│   │   │   ├── ResearchTrailDrawer.tsx
+│   │   │   └── ui/                  # Radix primitives
+│   │   └── lib/
+│   │       ├── api.ts               # Typed client with timeouts
+│   │       ├── india.ts             # Phone / date / INR / regions
+│   │       ├── server-auth.ts       # Server-side Clerk token
+│   │       └── types.ts
+│   └── public/models/avatar.glb
 │
-├── ARCHITECTURE.md                 # Technical architecture & design rationale
-├── WOMEN_SAFETY_AUDIT.md           # Safety, privacy & trauma-informed compliance audit
-└── README.md                       # Comprehensive project documentation
+├── .env.example                     # Every variable, with failure behaviour
+├── ARCHITECTURE.md
+├── VALIDATION_REPORT.md             # Feature health matrix & known risks
+└── WOMEN_SAFETY_AUDIT.md
 ```
 
 ---
 
-## ⚙️ Environment Configuration
+## ⚙️ Configuration
 
-### 1. Backend Configuration (`backend/.env`)
-Create `backend/.env` with the following keys:
+**[`.env.example`](.env.example) documents every variable and what happens when
+it is missing.** Copy its two sections to `backend/.env` and
+`frontend/.env.local`.
 
-```env
-# ==============================================================================
-# 1. CORE SEARCH & RESEARCH (Required for live real-world research)
-# ==============================================================================
-SERPAPI_API_KEY=your_serpapi_api_key_here
+The app **starts with no optional integration configured**. Each feature that
+needs a missing key reports an outage to the user rather than inventing a
+result. `GET /health` tells you exactly what is live:
 
-# ==============================================================================
-# 2. AI MODEL PROVIDERS (Required: Google Gemini)
-# ==============================================================================
-GEMINI_API_KEY=your_google_gemini_api_key_here
-GROQ_API_TOKEN=your_groq_api_token_here
-
-# (Optional) AWS Bedrock & S3 Configuration (for legacy Titan image gen)
-AWS_ACCESS_KEY_ID=your_aws_access_key_id
-AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
-AWS_REGION=us-east-1
-S3_BUCKET_NAME=your_s3_bucket_name
-
-# ==============================================================================
-# 3. DATABASE (MongoDB Atlas recommended for Vector Search)
-# ==============================================================================
-MONGO_ENDPOINT=mongodb+srv://<username>:<password>@cluster0.mongodb.net/haven?retryWrites=true&w=majority
-# Or standard URI:
-MONGODB_URI=mongodb://localhost:27017/haven
-
-# ==============================================================================
-# 4. GEOCODING & MAPS (Optional reverse geocoding)
-# ==============================================================================
-OPENCAGE_API_KEY=your_opencage_key_here
+```json
+{
+  "status": "ok",
+  "database": "in-memory",
+  "integrations": { "gemini": true, "serpapi": true, "mongodb": true, "clerk": false },
+  "degraded": ["clerk", "groq", "aws_bedrock"]
+}
 ```
 
-### 2. Frontend Configuration (`frontend/.env.local`)
-Create `frontend/.env.local` with the following keys:
+### Minimum to run locally
 
 ```env
-# Clerk Authentication Keys (From https://dashboard.clerk.com)
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
+# backend/.env
+GEMINI_API_KEY=...        # agents; without it they return 503 honestly
+SERPAPI_API_KEY=...       # live research
+MONGODB_URI=mongodb://localhost:27017   # without it: in-memory, data lost on restart
+```
 
-# Clerk Auth Route Mappings
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
-NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
-
-# Backend API Endpoint
+```env
+# frontend/.env.local
 NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 ```
 
+### Required in production
+
+| Variable | Why |
+|---|---|
+| `HERWAY_ENV=production` | Enforces the safe configuration below. |
+| `HERWAY_SESSION_SECRET` | Signs anonymous session cookies. |
+| `MONGODB_URI` | The app **refuses to start** without a reachable database rather than silently losing saved cases. |
+| `CLERK_ISSUER` + `CLERK_SECRET_KEY` | Real accounts. Without them the build refuses unless `HERWAY_ALLOW_AUTH_FALLBACK=true`. |
+| `HERWAY_ADMIN_USER_IDS` | Allow-list for `/dashboard`. Empty means nobody has access. |
+
 ---
 
-## 🛠️ Quick Start & Installation
+## 🛠️ Quick start
 
 ### Prerequisites
 - **Node.js** 18.17+ or 20+
-- **Python** 3.10, 3.11, or 3.12
-- **MongoDB** instance (Local or free MongoDB Atlas cluster)
-- **SerpApi API Key** (Free tier available at [serpapi.com](https://serpapi.com))
-- **Google Gemini API Key** (Free tier available at [aistudio.google.com](https://aistudio.google.com))
+- **Python** 3.11–3.13
+- **MongoDB** (local or a free Atlas cluster) — optional for a first look
+- **SerpApi key** ([serpapi.com](https://serpapi.com)) and **Gemini key**
+  ([aistudio.google.com](https://aistudio.google.com))
 
----
-
-### Step 1: Clone Repository
-```bash
-git clone https://github.com/your-username/Haven.git
-cd Haven
-```
-
----
-
-### Step 2: Backend Setup
-Open a terminal in the root directory:
+### 1. Backend
 
 ```bash
-# 1. Navigate to backend
 cd backend
-
-# 2. Create Python virtual environment
 python -m venv .venv
 
-# 3. Activate virtual environment
-# Windows (PowerShell):
+# Windows (PowerShell)
 .\.venv\Scripts\Activate.ps1
-# Linux / macOS:
+# macOS / Linux
 source .venv/bin/activate
 
-# 4. Install dependencies
-pip install -r requirements.txt -r requirements-v2.txt
+pip install -r requirements.txt
 
-# 5. Start the FastAPI server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Run from the REPOSITORY ROOT — the app uses absolute `backend.*` imports
+cd ..
+uvicorn backend.main:app --reload --port 8000
 ```
 
-> **Backend is now live at:** `http://localhost:8000`  
-> **Interactive Swagger API Docs:** `http://localhost:8000/docs`
+> Backend: `http://localhost:8000` · Swagger: `http://localhost:8000/docs`
+> · Health: `http://localhost:8000/health`
 
----
-
-### Step 3: Frontend Setup
-Open a second terminal window:
+### 2. Frontend
 
 ```bash
-# 1. Navigate to frontend
 cd frontend
-
-# 2. Install dependencies
 npm install
-
-# 3. Start Next.js development server
 npm run dev
 ```
 
-> **Frontend is now live at:** `http://localhost:3000`
+> Frontend: `http://localhost:3000`
+
+The browser never calls the backend directly — everything goes through the
+Next.js proxy at `/api/v2/*`, which keeps the session cookie first-party and
+attaches the Clerk token server-side.
 
 ---
 
-## 📡 API Reference
+## 🧪 Testing
 
-### 1. v2 Case & Research Pipeline (`/api/v2/*`)
+```bash
+# Backend — 140 tests, fully mocked, no API credit spent
+backend/.venv/Scripts/python.exe -m pytest backend/tests -q     # Windows
+python -m pytest backend/tests -q                               # macOS / Linux
 
-| Method | Endpoint | Description | Payload / Query |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/v2/cases` | Creates a new case and saves situation details | `{"user_id": "...", "situation_text": "...", "category": "..."}` |
-| `GET` | `/api/v2/cases` | Lists saved cases (filtered by user_id) | `?user_id=...` |
-| `GET` | `/api/v2/cases/{id}` | Retrieves full case detail (facts, plan, evidence) | Path parameter `{id}` |
-| `POST` | `/api/v2/cases/analyze` | Generates initial situation facts & missing info | `{"situation_text": "..."}` |
-| `POST` | `/api/v2/cases/{id}/research` | Dispatches live multi-agent SerpApi research | None (uses stored case narrative) |
-| `POST` | `/api/v2/cases/{id}/actions/{idx}/toggle` | Toggles an action step's completion status | Path parameters `{id}`, `{idx}` |
-| `POST` | `/api/v2/chat` | Case-grounded tool-calling conversational agent | `{"case_id": "...", "message": "...", "mode": "therapy|legal"}` |
+# Frontend
+cd frontend && npm run lint && npm run build
+```
+
+| Suite | Covers |
+|---|---|
+| `test_authorization.py` | Cross-user access on every case endpoint; session isolation; rejected tokens |
+| `test_e2e_cases.py` | All seven user flows + Gemini down, SerpApi down, invalid JSON, partial failure |
+| `test_serpapi.py` | Normalization, caching, the full failure matrix, India locale |
+| `test_llm_service.py` | Outage / quota / timeout classification; non-blocking execution |
+| `test_safety_plan.py` | Six-phase generation, adaptation, preserved progress |
+| `test_source_verifier.py` | Authority scoring, agreement, contradictions |
+| `test_research_orchestrator.py` | Vertical routing, budget, dedup, degradation reporting |
+| `test_women_safety.py` | Category routing, India resources, no-confrontation mandate |
 
 ---
 
-### 2. Original Haven Endpoints (Root Mount)
+## 📡 API reference
+
+### Cases — `/api/v2/cases`
 
 | Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `POST` | `/text-generation` | Expands distress text using dual Gemini + Gemma models |
-| `POST` | `/text-decomposition` | Parses raw text into structured attributes |
-| `POST` | `/save-extracted-data` | Saves extracted incident report to the `admin` collection |
-| `POST` | `/encode` | Conceals text in image pixel data using LSB steganography |
-| `POST` | `/decode` | Extracts hidden text from an uploaded steganographic image |
-| `GET` | `/poem-generation` | Generates an inspirational coping poem for distress |
-| `GET` | `/get-admin-posts` | Retrieves all community/admin incident reports |
-| `GET` | `/find-match` | Finds top matching reports using Atlas vector similarity |
-| `GET` | `/get-post/{id}` | Retrieves a specific community post by MongoDB ObjectId |
-| `POST` | `/close-issue/{id}` | Updates issue status to `closed` |
-| `POST` | `/upload_embeddings/` | Generates and uploads legal document embeddings to MongoDB |
+|---|---|---|
+| `POST` | `/api/v2/cases` | Create a case. Ownership comes from the session — **no `user_id` in the body**. |
+| `GET` | `/api/v2/cases` | List the caller's own cases. `?status=` `?limit=` |
+| `GET` | `/api/v2/cases/{id}` | Full case: situation, evidence, plans, trace, degradations |
+| `PATCH` | `/api/v2/cases/{id}` | Update title, status (`active`/`paused`/`resolved`/`archived`), location |
+| `DELETE` | `/api/v2/cases/{id}` | Archive |
+| `POST` | `/api/v2/cases/analyze` | Structure a narrative without saving it |
+| `GET` | `/api/v2/cases/{id}/safety-plan` | The active safety plan |
+| `PATCH` | `/api/v2/cases/{id}/actions/{action_id}` | Set a step's status |
+| `POST` | `/api/v2/cases/{id}/safety-plan/adapt` | Re-plan after an escalation, preserving completed steps |
+| `POST` | `/api/v2/cases/{id}/safety-plan/research-more` | Search for more local resources |
+
+### Research — `/api/v2/research`
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v2/research/{id}/run` | Run the pipeline. Returns `complete` or `partial` with `degradations[]`. |
+| `GET` | `/api/v2/research/{id}/report` | Full research report |
+| `GET` | `/api/v2/research/{id}/plan` | Action plan |
+
+### Chat, discreet messaging, resources
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v2/chat` | `{case_id?, message, history, mode?: "therapy"\|"legal"}` |
+| `POST` | `/api/v2/discreet/encode` | multipart `message` + `file` ➔ base64 PNG |
+| `POST` | `/api/v2/discreet/decode` | multipart `file` ➔ `{found, message, note}` |
+| `GET` | `/api/v2/discreet/limitations` | What steganography does and does not protect |
+| `GET` | `/api/v2/resources/national` | Helplines + portals, each with its official source URL. `?category=` |
+| `GET` | `/api/v2/resources/regions` | Indian states and union territories |
+| `GET` | `/health` | Status, database mode, per-integration availability |
+
+**All case, research and chat endpoints verify ownership.** A case belonging to
+another account or session returns `403`.
+
+### Original endpoints (root mount)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/text-generation` | Expand distress text (Gemini + Gemma) |
+| `POST` | `/text-decomposition` | Parse text into structured attributes |
+| `POST` | `/save-extracted-data` | Save a community post (field allow-list; no contact details stored) |
+| `POST` | `/encode` · `/decode` | Legacy steganography — prefer `/api/v2/discreet/*` |
+| `GET` | `/poem-generation` | Encouragement poem |
+| `GET` | `/get-admin-posts` · `/get-post/{id}` | Community posts, contact details stripped |
+| `GET` | `/find-match` | Vector similarity over an allow-listed collection |
+| `POST` | `/close-issue/{id}` | Close a report — **requires sign-in** |
+| `POST` | `/upload_embeddings/` | Index legal documents — **requires sign-in** |
+| `POST` | `/generate-image` | Image generation via AWS Bedrock + S3 (503 when AWS is unset) |
+| `POST` | `/img-generation` | Legacy image-prompt stub |
+| `POST` | `/send-message` | Legacy Twitter share |
 
 ---
 
-## 🔒 Security, Privacy & Trauma-Informed Design
+## 🔒 Security & privacy
 
-1. **Quick Escape (`ESC`)**: Global key listener immediately redirects the active browser tab to Google.
-2. **Stateless Discretion**: Anonymous creation options enable survivors under device monitoring to generate steganographic help messages and browse peer stories without account registration.
-3. **API Key Isolation**: SerpApi, Gemini, and database credentials remain strictly within the backend server environment.
-4. **Verifiable Information**: Every phone number, address, and legal provision presented in action plans is verified through live search against official `.gov` registries, legal aid networks, and verified crisis desks.
+1. **Server-side identity.** `backend/auth.py` verifies Clerk session tokens
+   against JWKS. Anonymous visitors get a signed, httpOnly, per-browser session
+   so their cases are isolated from each other.
+2. **Ownership on every endpoint.** No endpoint accepts a caller-supplied
+   `user_id`.
+3. **Credentials stay server-side.** SerpApi, Gemini and database keys are
+   never exposed to the browser; the Clerk token is attached in the proxy.
+4. **PII scrubbing.** Names, emails and phone numbers are stripped from search
+   queries before they leave the server.
+5. **Community privacy.** Contact fields are removed server-side and never
+   rendered.
+6. **Honest limits.** [`/privacy`](frontend/src/app/privacy/page.tsx) states
+   what HerWay cannot protect against: monitoring software, shared devices,
+   browser history, and the fact that steganography is not encryption.
 
 ---
 
-## 📄 License & Acknowledgments
+## 🛠️ Troubleshooting
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+**`{"errors":[{"message":"Invalid host","code":"host_invalid"}]}`**
 
-- **SerpApi** for powering reliable, live real-world search retrieval.
-- **Google Gemini** for high-speed agentic reasoning and natural language synthesis.
-- **Three.js** for powering the 3D empathetic companion avatar.
-- **MongoDB Atlas** for document persistence and vector similarity search.
+Clerk could not match your publishable key to a real project. Almost always the
+key is a placeholder rather than one copied from
+[dashboard.clerk.com](https://dashboard.clerk.com). A publishable key is
+`pk_test_`/`pk_live_` followed by the base64 of your Frontend API host, so a
+plausible-looking key can still point at an instance that does not exist.
+
+Decode yours to see where it points:
+
+```bash
+node -e "console.log(atob(process.argv[1].replace(/^pk_(test|live)_/,'')))" "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"
+```
+
+Clerk names development instances `<word>-<word>-<number>.clerk.accounts.dev`.
+If yours decodes to something else, it is not a real instance.
+
+HerWay checks this at startup. When the keys are unusable it says so and runs in
+anonymous-session mode instead of loading a Clerk SDK that will fail on every
+request — every feature still works except cases following a user across
+devices. The check lives in
+[`clerk-config.ts`](frontend/src/lib/clerk-config.ts) and is shared by
+`next.config.ts`, the middleware and the server helpers so they cannot disagree.
+Override it with `HERWAY_TRUST_CLERK_KEYS=true` if you have a genuine key it
+rejects.
+
+> Next.js reads `.env.local` at startup only — restart the dev server after
+> editing it.
+
+---
+
+## ⚠️ Known limitations
+
+See [**VALIDATION_REPORT.md**](VALIDATION_REPORT.md) for the full feature
+health matrix. The main ones:
+
+- **LawBot RAG** needs a MongoDB Atlas `$vectorSearch` index named
+  `culpritIndex2` over `doc_embedding`. Without it LawBot falls back to live
+  web search.
+- **Community post images** require AWS Bedrock + S3.
+- **Gemini free tier** is ~20 requests/day; one full case uses 5–8.
+- **Safety plan quality** has not been reviewed by a DV professional. Prompts
+  enforce structure and the no-confrontation mandate, but expert review is
+  needed before real-world use.
+- **No rate limiting** on HerWay's own endpoints yet.
+- `google-generativeai` is deprecated upstream; migration to `google-genai`
+  is pending.
+
+---
+
+## 📄 License & acknowledgments
+
+Licensed under the **MIT License**.
+
+- **SerpApi** — live search retrieval
+- **Google Gemini** — agentic reasoning and synthesis
+- **Three.js** — the 3D companion
+- **MongoDB Atlas** — persistence and vector similarity
+- **Government of India** — MWCD, NCW, NALSA, MHA and the National Cyber Crime
+  Reporting Portal, whose published resources HerWay links to directly
 
 ---
 
 <div align="center">
-<b>Haven</b> — Dedicated to safety, dignity, and empowerment for every woman. 💜
+<b>HerWay</b> — dedicated to safety, dignity and empowerment for every woman. 💜
 </div>

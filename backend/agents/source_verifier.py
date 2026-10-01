@@ -42,6 +42,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
 
+from backend.india_resources import TIER_AUTHORITY, SourceTier, classify_source_tier
 from backend.models.research import (
     Contradiction,
     EvidenceConfidence,
@@ -51,6 +52,11 @@ from backend.models.research import (
     Situation,
     SourceType,
 )
+
+#: Below this directness score the snippet does not actually address the user's
+#: question, so the item is reported as unverified no matter how authoritative
+#: the domain is. An official page about something else is still off-topic.
+_MIN_DIRECTNESS_FOR_SUPPORT = 0.35
 
 if TYPE_CHECKING:
     from backend.services.llm_service import LLMService
@@ -184,6 +190,11 @@ class SourceVerifier:
             if raw.contradiction_found or agreement_score <= 0.2:
                 status = EvidenceStatus.CONFLICTING
                 conf = EvidenceConfidence.LOW
+            elif raw.directness_score < _MIN_DIRECTNESS_FOR_SUPPORT:
+                # The source may be reputable, but it does not speak to this
+                # question. Never present it as supporting the user's claim.
+                status = EvidenceStatus.UNVERIFIED
+                conf = EvidenceConfidence.LOW
             elif final_score >= 0.75:
                 status = EvidenceStatus.VERIFIED_STRONGLY_SUPPORTED
                 conf = EvidenceConfidence.HIGH
@@ -235,21 +246,50 @@ class SourceVerifier:
         return evidence_list
 
     def _evaluate_authority(self, domain: Optional[str], fallback_type: SourceType) -> tuple[float, SourceType]:
-        """Compute observable domain authority score and refine source_type."""
+        """Compute observable domain authority score and refine source_type.
+
+        Authority is driven by the India-first source hierarchy in
+        ``backend.india_resources``.  Two previous defects are fixed here:
+
+        * ``.nic.in`` was not recognised as government, so authoritative Indian
+          portals (``edaakhil.nic.in``, ``ncw.nic.in``) scored as ordinary
+          commercial sites.
+        * Unrecognised domains defaulted to 0.65 — the same weight as an
+          official company help centre — which let random blogs and video
+          pages be labelled "partially supported".  Unknown now means low.
+        """
         if not domain:
-            return 0.35, fallback_type
+            return 0.30, fallback_type if fallback_type != SourceType.UNKNOWN else SourceType.UNKNOWN
 
-        d = domain.lower()
-        if d.endswith(".gov") or d.endswith(".gov.in") or d.endswith(".gov.uk") or d.endswith(".edu") or d.endswith(".ac.in"):
-            return 0.95, SourceType.OFFICIAL_GOVERNMENT
-        if "org" in d or "consumerhelpline" in d or "ncdrc" in d or "cybercrime" in d:
-            return 0.85, SourceType.OFFICIAL_ORGANIZATION
-        if any(news_kw in d for news_kw in ["news", "times", "reuters", "bbc", "hindu", "tribune", "express", "post"]):
-            return 0.75, SourceType.NEWS
-        if any(forum_kw in d for forum_kw in ["reddit", "quora", "forum", "medium", "wordpress", "blogspot"]):
-            return 0.35, SourceType.FORUM
+        d = domain.lower().replace("www.", "")
 
-        return 0.65, fallback_type if fallback_type != SourceType.UNKNOWN else SourceType.COMPANY
+        # Explicit low-trust surfaces beat any generic heuristic.
+        if any(kw in d for kw in ("reddit.", "quora.", "forum", "blogspot.", "wordpress.", "medium.com")):
+            return 0.30, SourceType.FORUM
+        if any(kw in d for kw in ("youtube.", "youtu.be", "tiktok.", "facebook.", "instagram.", "x.com", "twitter.")):
+            return 0.25, SourceType.COMMUNITY
+
+        tier = classify_source_tier(d)
+        score = TIER_AUTHORITY[tier]
+
+        type_by_tier = {
+            SourceTier.GOVERNMENT_OF_INDIA: SourceType.OFFICIAL_GOVERNMENT,
+            SourceTier.STATE_GOVERNMENT: SourceType.OFFICIAL_GOVERNMENT,
+            SourceTier.POLICE_LEGAL_SERVICES: SourceType.OFFICIAL_GOVERNMENT,
+            SourceTier.ESTABLISHED_NGO: SourceType.OFFICIAL_ORGANIZATION,
+            SourceTier.REPUTABLE_NEWS: SourceType.NEWS,
+        }
+        if tier in type_by_tier:
+            return score, type_by_tier[tier]
+
+        # GENERAL_WEB — trust whatever the model inferred, but keep the weight low.
+        resolved = fallback_type if fallback_type != SourceType.UNKNOWN else SourceType.UNKNOWN
+        if resolved in (SourceType.BLOG, SourceType.FORUM, SourceType.COMMUNITY):
+            return 0.30, resolved
+        if resolved == SourceType.COMPANY:
+            # A company's own help centre is authoritative about its own policy.
+            return 0.55, resolved
+        return score, resolved
 
     def _extract_domain(self, url: Optional[str]) -> Optional[str]:
         if not url:

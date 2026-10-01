@@ -38,27 +38,32 @@ from backend.agents.safety_plan_agent import SafetyPlanAgent
 
 @pytest.fixture
 def mock_llm():
-    """Mock LLMService for deterministic unit/integration testing."""
+    """Mock LLMService for deterministic unit/integration testing.
+
+    ``structured_generate`` is awaited by the agents, so it must be an
+    AsyncMock — tests set ``.side_effect`` to script successive responses.
+    """
     llm = MagicMock()
+    llm.structured_generate = AsyncMock()
     return llm
 
 
 @pytest.fixture
 def sample_dv_situation():
     return Situation(
-        case_summary="User is facing escalating physical and verbal threats from her domestic partner in Austin, TX.",
+        case_summary="User is facing escalating physical and verbal threats from her domestic partner in Pune, Maharashtra.",
         category=SituationCategory.DOMESTIC_VIOLENCE,
         urgency=Urgency.CRITICAL,
         user_goal="Safely find temporary emergency shelter and understand protective order rights.",
         known_facts=[
             "Partner threatened physical violence yesterday",
-            "User lives in Austin, Texas with perpetrator",
+            "User lives in Pune, Maharashtra with the person causing harm",
             "User has personal identification documents in a bag",
         ],
         user_claims=["Partner is monitoring calls and messages"],
         unknowns=["Whether local family violence shelters have availability today"],
         missing_information=["Does user have access to private transportation?"],
-        location="Austin, TX",
+        location="Pune, Maharashtra",
     )
 
 
@@ -76,7 +81,7 @@ def sample_stalking_situation():
         user_claims=["Suspect might be an acquaintance from work"],
         unknowns=["Whether police can issue a restraining order without suspect's full legal name"],
         missing_information=[],
-        location="Austin, TX",
+        location="Pune, Maharashtra",
     )
 
 
@@ -125,12 +130,12 @@ def sample_evidence():
         ),
         EvidenceItem(
             id="EVIDENCE_02",
-            source_title="Austin Police Department - Family Violence Protection Unit",
-            url="https://www.austintexas.gov/police",
-            domain="austintexas.gov",
-            claim_supported="Emergency protective orders (EPO) can be requested immediately through magistrate or local family violence unit.",
+            source_title="Protection of Women from Domestic Violence Act, 2005 — India Code",
+            url="https://www.indiacode.nic.in/handle/123456789/2021",
+            domain="indiacode.nic.in",
+            claim_supported="A Protection Officer or the Magistrate can be approached for a protection order under the PWDVA, 2005.",
             confidence_score=0.98,
-            why_this_source_matters="Official municipal law enforcement procedure.",
+            why_this_source_matters="Authoritative text of the Act from the official India Code repository.",
         ),
     ]
 
@@ -139,11 +144,11 @@ def sample_evidence():
 def sample_local_resources():
     return [
         LocalResource(
-            name="SAFE Alliance Austin Women's Shelter",
+            name="One Stop Centre (Sakhi), Pune",
             category="shelter",
-            phone="(512) 267-7233",
-            address="4800 Manor Rd, Austin, TX 78723",
-            website="https://www.safeaustin.org",
+            phone="181",
+            address="Shivajinagar, Pune, Maharashtra 411005",
+            website="https://pune.gov.in/one-stop-centre",
             rating=4.8,
             hours="24/7",
         )
@@ -175,7 +180,7 @@ async def test_domestic_violence_generates_safety_plan(mock_llm, sample_dv_situa
             "threats_present": "Threatened physical harm directly",
             "digital_safety_concern": "User noted device and call monitoring",
         },
-        context_summary="Critical safety situation with active threats and monitored communications in Austin, TX.",
+        context_summary="Critical safety situation with active threats and monitored communications in Pune, Maharashtra.",
         critical_safety_notes=["Do not confront partner directly", "Clear browser history or use quick exit"],
         missing_safety_information=["Private transport availability"],
     )
@@ -197,7 +202,7 @@ async def test_domestic_violence_generates_safety_plan(mock_llm, sample_dv_situa
         next_24h_actions = [
             SafetyActionItem(
                 id="SAFE_NEXT_24H_01",
-                title="Contact SAFE Alliance Austin helpline confidentially",
+                title="Call the women helpline 181 from a phone he cannot check",
                 description="Call (512) 267-7233 from a secure phone to check shelter intake.",
                 phase=SafetyPlanPhase.NEXT_24_HOURS,
                 priority=ActionPriority.HIGH,
@@ -220,7 +225,7 @@ async def test_domestic_violence_generates_safety_plan(mock_llm, sample_dv_situa
         formal_options_actions = [
             SafetyActionItem(
                 id="SAFE_FORMAL_01",
-                title="Review Emergency Protective Order options with Austin PD",
+                title="Ask about a protection order under the PWDVA at the One Stop Centre",
                 description="Consult family violence advocates regarding ex-parte protective order application.",
                 phase=SafetyPlanPhase.FORMAL_OPTIONS,
                 priority=ActionPriority.MEDIUM,

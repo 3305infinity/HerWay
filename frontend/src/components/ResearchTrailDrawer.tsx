@@ -2,29 +2,26 @@
 
 import React, { useState } from 'react';
 
-export interface TraceEntry {
-  task_id: string;
-  why_searched: string;
-  query: string;
-  engine: string;
-  results_found: number;
-  sources_used?: number;
-  selected_urls?: string[];
-  time_taken_ms: number;
-  is_cached?: boolean;
-  is_followup?: boolean;
-  freshness_policy?: string;
-  success: boolean;
-  error?: string;
+import type { ResearchTraceEntry } from '@/lib/types';
+
+export type TraceEntry = ResearchTraceEntry & { is_followup?: boolean };
+
+export interface Degradation {
+  stage: string;
+  reason: string;
+  user_message: string;
 }
 
 interface ResearchTrailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  category?: string;
   trace: TraceEntry[];
   evidenceCount?: number;
-  actionCount?: number;
+  /** Parts of the research that did not complete. */
+  degradations?: Degradation[];
+  /** The location actually searched, or null if the user gave none. */
+  locationUsed?: string | null;
+  hasPlan?: boolean;
 }
 
 // Map engine names to human labels
@@ -35,30 +32,65 @@ function engineLabel(engine: string) {
   return 'Web';
 }
 
-// The research "journey" steps — human-readable, not developer-facing
-const JOURNEY_STEPS = [
-  { key: 'understanding', label: 'Understanding your situation' },
-  { key: 'searching', label: 'Searching official resources' },
-  { key: 'local', label: 'Checking local support' },
-  { key: 'verifying', label: 'Comparing and verifying sources' },
-  { key: 'planning', label: 'Building your plan' },
-];
-
 export default function ResearchTrailDrawer({
   isOpen,
   onClose,
-  category = 'General Dispute',
   trace = [],
   evidenceCount = 0,
-  actionCount = 0,
+  degradations = [],
+  locationUsed = null,
+  hasPlan = false,
 }: ResearchTrailDrawerProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   if (!isOpen) return null;
 
   const successCount = trace.filter((t) => t.success && !t.is_cached).length;
+  const failedCount = trace.filter((t) => !t.success).length;
   const cachedCount = trace.filter((t) => t.is_cached).length;
   const totalMs = trace.reduce((acc, t) => acc + (t.time_taken_ms || 0), 0);
+
+  // Each stage is marked done only from evidence that it actually ran. The
+  // previous version ticked stages off purely from how many searches existed,
+  // so a case where every search failed still displayed five green ticks.
+  const journeySteps = [
+    {
+      key: 'understanding',
+      label: 'Understanding your situation',
+      done: trace.length > 0 || evidenceCount > 0 || hasPlan,
+      note: '',
+    },
+    {
+      key: 'searching',
+      label: 'Searching official resources',
+      done: trace.some((t) => engineLabel(t.engine) === 'Web' && t.success),
+      note: trace.some((t) => engineLabel(t.engine) === 'Web' && !t.success)
+        ? 'A web search did not complete'
+        : '',
+    },
+    {
+      key: 'local',
+      label: 'Checking local support',
+      done: trace.some((t) => engineLabel(t.engine) === 'Maps' && t.success),
+      note: locationUsed
+        ? trace.some((t) => engineLabel(t.engine) === 'Maps' && !t.success)
+          ? 'The nearby-centre search did not complete'
+          : ''
+        : 'Skipped — no location provided',
+    },
+    {
+      key: 'verifying',
+      label: 'Comparing and verifying sources',
+      done: evidenceCount > 0,
+      note: evidenceCount === 0 ? 'No sources could be verified' : '',
+    },
+    {
+      key: 'planning',
+      label: 'Building your plan',
+      done: hasPlan,
+      note: hasPlan ? '' : 'No plan was produced',
+    },
+  ];
 
   return (
     <div
@@ -84,8 +116,10 @@ export default function ResearchTrailDrawer({
               How HerWay researched this
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {successCount} search{successCount !== 1 ? 'es' : ''} · {evidenceCount} sources verified
-              {cachedCount > 0 && ` · ${cachedCount} cached`}
+              {successCount} search{successCount !== 1 ? 'es' : ''} · {evidenceCount} source
+              {evidenceCount !== 1 ? 's' : ''} verified
+              {cachedCount > 0 && ` · ${cachedCount} reused`}
+              {failedCount > 0 && ` · ${failedCount} failed`}
             </p>
           </div>
           <button
@@ -108,25 +142,47 @@ export default function ResearchTrailDrawer({
               Research journey
             </p>
             <div className="space-y-3">
-              {JOURNEY_STEPS.map((step, idx) => {
-                const isDone = idx < Math.min(JOURNEY_STEPS.length, trace.length + 1);
-                return (
-                  <div key={step.key} className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${isDone ? 'bg-emerald-500' : 'bg-muted border-2 border-border'}`} aria-hidden="true">
-                      {isDone && (
-                        <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
-                          <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </div>
-                    <span className={`text-sm ${isDone ? 'text-foreground' : 'text-muted-foreground/50'}`}>
+              {journeySteps.map((step) => (
+                <div key={step.key} className="flex items-start gap-3">
+                  <div
+                    className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                      step.done ? 'bg-emerald-500' : 'bg-muted border-2 border-border'
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {step.done && (
+                      <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                        <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className={`text-sm ${step.done ? 'text-foreground' : 'text-muted-foreground/60'}`}>
                       {step.label}
                     </span>
+                    {step.note && (
+                      <p className="text-[11px] text-amber-700 dark:text-amber-400">{step.note}</p>
+                    )}
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           </div>
+
+          {degradations.length > 0 && (
+            <div className="px-5 pb-5">
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 space-y-1.5">
+                <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                  What is missing from this research
+                </p>
+                {degradations.map((d, i) => (
+                  <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                    {d.user_message}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Individual search details — collapsed by default */}
           {trace.length > 0 && (
@@ -164,12 +220,16 @@ export default function ResearchTrailDrawer({
                           <p className="text-xs text-foreground font-medium leading-snug line-clamp-1">
                             {entry.why_searched || entry.query}
                           </p>
-                          <p className="text-[11px] text-muted-foreground">
+                          <p
+                            className={`text-[11px] ${
+                              entry.success ? 'text-muted-foreground' : 'text-amber-700 dark:text-amber-400'
+                            }`}
+                          >
                             {entry.is_cached
-                              ? 'Served from cache'
+                              ? 'Reused an earlier identical search'
                               : entry.success
-                              ? `${entry.results_found} results · ${Math.round(entry.time_taken_ms)}ms`
-                              : 'Search failed gracefully'}
+                              ? `${entry.results_found} result${entry.results_found !== 1 ? 's' : ''} · ${Math.round(entry.time_taken_ms)}ms`
+                              : 'This search did not complete'}
                           </p>
                         </div>
                         <svg
@@ -215,8 +275,8 @@ export default function ResearchTrailDrawer({
                             </div>
                           )}
                           {entry.error && (
-                            <p className="text-xs text-destructive">
-                              Note: {entry.error}
+                            <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                              Why it failed: {entry.error}
                             </p>
                           )}
                         </div>

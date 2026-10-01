@@ -1,7 +1,11 @@
-import PostDetail from '@/components/PostDetail';
 import React from 'react';
+import PostDetail from '@/components/PostDetail';
 
-async function Page({ params }: { params: { id: string } }) {
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
 
   return (
@@ -10,5 +14,3 @@ async function Page({ params }: { params: { id: string } }) {
     </div>
   );
 }
-
-export default Page;
