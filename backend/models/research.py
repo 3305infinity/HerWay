@@ -52,8 +52,96 @@ class SituationCategory(str, Enum):
     UNSAFE_RELATIONSHIP = "unsafe_relationship"
     WORKPLACE_HARASSMENT = "workplace_harassment"
     OTHER_WOMEN_SAFETY = "other_women_safety"
-    
+
+    # Added in Phase 2. Purely additive — every value above keeps its meaning,
+    # so cases already stored under them deserialize unchanged.
+    #: Danger happening now or imminent. Routes straight to emergency guidance.
+    IMMEDIATE_DANGER = "immediate_danger"
+    #: Harassment in public space: streets, transport, markets.
+    STREET_HARASSMENT = "street_harassment"
+    #: Getting somewhere safely — late travel, cabs, being followed en route.
+    UNSAFE_TRAVEL = "unsafe_travel"
+    #: School, college or hostel safety, including ragging and campus ICC.
+    CAMPUS_SAFETY = "campus_safety"
+    #: Emotional support with no factual or procedural question attached.
+    EMOTIONAL_DISTRESS = "emotional_distress"
+    #: Forward-looking planning when nothing is wrong right now.
+    SAFETY_PLANNING = "safety_planning"
+    #: "What is near me" — finding services without a disclosed incident.
+    LOCAL_DISCOVERY = "local_discovery"
+
     OTHER = "other"
+
+
+#: Categories that describe a women's-safety concern rather than a general
+#: consumer/service problem. Used for routing; see ``backend.safety_triage``.
+WOMEN_SAFETY_CATEGORY_VALUES = frozenset(
+    {
+        "domestic_violence",
+        "sexual_harassment",
+        "stalking",
+        "online_harassment",
+        "threats",
+        "coercive_control",
+        "unsafe_relationship",
+        "workplace_harassment",
+        "other_women_safety",
+        "immediate_danger",
+        "street_harassment",
+        "unsafe_travel",
+        "campus_safety",
+        "safety_planning",
+        "safety",
+    }
+)
+
+
+class SituationIntent(str, Enum):
+    """What the user wants from HerWay *right now*.
+
+    Distinct from ``user_goal`` (their real-world outcome) and from
+    ``category`` (what the situation is about). Intent is what decides which
+    interface to put in front of them, which is why it is a closed set.
+    """
+
+    #: Needs to get safe immediately. Emergency numbers before anything else.
+    GET_TO_SAFETY = "get_to_safety"
+    #: Wants to understand rights, law or an official procedure.
+    UNDERSTAND_OPTIONS = "understand_options"
+    #: Wants to report to police/ICC/portal, or draft a complaint.
+    TAKE_FORMAL_ACTION = "take_formal_action"
+    #: Wants to find a service, office or shelter nearby.
+    FIND_LOCAL_HELP = "find_local_help"
+    #: Wants to be heard. No factual question attached.
+    EMOTIONAL_SUPPORT = "emotional_support"
+    #: Wants to prepare for a future risk.
+    PLAN_AHEAD = "plan_ahead"
+    #: Wants evidence kept or a record made.
+    PRESERVE_EVIDENCE = "preserve_evidence"
+    #: Anything else, or not yet determined.
+    OTHER = "other"
+
+
+class SafetyWorkflow(str, Enum):
+    """Which HerWay surface should handle this situation.
+
+    Chosen deterministically from category + urgency (see
+    ``backend.safety_triage.recommend_workflow``) so routing still works when
+    the LLM is unavailable.
+    """
+
+    #: Helplines and immediate steps first, questions later.
+    EMERGENCY = "emergency"
+    #: Build or adapt a persistent safety plan.
+    SAFETY_PLAN = "safety_plan"
+    #: Legal information path (LawBot).
+    LEGAL_INFO = "legal_info"
+    #: Emotional support path (Niva/TherapyBot).
+    EMOTIONAL_SUPPORT = "emotional_support"
+    #: Find nearby services.
+    LOCAL_RESOURCES = "local_resources"
+    #: Ordinary research-and-action-plan path.
+    GENERAL_RESEARCH = "general_research"
 
 
 class Situation(BaseModel):
@@ -114,6 +202,38 @@ class Situation(BaseModel):
     recommended_research_types: List[str] = Field(
         default_factory=list,
         description="Suggested search verticals (e.g., web, news, maps, local)",
+    )
+
+    # -- Added in Phase 2 -------------------------------------------------
+    # Every field below has a default, so a Situation persisted before this
+    # change still validates and existing callers are unaffected.
+    intent: SituationIntent = Field(
+        SituationIntent.OTHER,
+        description="What the user wants from HerWay right now. Decides which "
+        "interface to show; distinct from user_goal.",
+    )
+    constraints: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Limits and preferences the user actually stated — 'cannot leave "
+            "the children', 'he checks my phone', 'do not contact my family', "
+            "'no money of my own'. Record only what was said; never infer."
+        ),
+    )
+    recommended_workflow: Optional[SafetyWorkflow] = Field(
+        None,
+        description=(
+            "Which HerWay surface should handle this. Normally set "
+            "deterministically by backend.safety_triage rather than by the model."
+        ),
+    )
+    immediate_danger_signals: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Phrases from the user's own words that indicate danger now. Quote "
+            "the user; do not paraphrase and do not invent a signal that is "
+            "not present in what they wrote."
+        ),
     )
 
     # Convenience properties for backward compatibility

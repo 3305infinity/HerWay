@@ -14,6 +14,7 @@ This service is invoked by ChatAgent's ``invoke_lawbot`` and
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from backend.db import get_database
@@ -21,6 +22,12 @@ from backend.utils.embedding import find_top_matches, generate_text_embedding
 from backend.utils.common import serialize_object_id
 
 logger = logging.getLogger(__name__)
+
+# The legal-document collection keeps its vector in a different field, and needs
+# its own Atlas index, separate from the community ``culpritIndex2``. Neither is
+# created by the application; see docs/KNOWN_ISSUES.md.
+LEGAL_VECTOR_PATH = os.getenv("LEGAL_VECTOR_PATH", "embedding")
+LEGAL_VECTOR_INDEX = os.getenv("LEGAL_VECTOR_INDEX", "docEmbeddingIndex")
 
 
 class EmbeddingService:
@@ -48,14 +55,32 @@ class EmbeddingService:
             return []
 
         try:
-            query_vector = generate_text_embedding(query)
+            # ``retrieval_query`` rather than ``retrieval_document``: this text is
+            # a question being matched against stored documents.
+            query_vector = generate_text_embedding(query, task_type="retrieval_query")
             collection = db["doc_embedding"]
             results = find_top_matches(
-                collection, query_vector, num_results=top_k, num_candidates=50
+                collection,
+                query_vector,
+                num_results=top_k,
+                num_candidates=50,
+                # Legal documents store their vector under ``embedding``; the
+                # default ``culprit_embedding`` belongs to community posts and
+                # does not exist in this collection.
+                path=LEGAL_VECTOR_PATH,
+                index=LEGAL_VECTOR_INDEX,
             )
             return [serialize_object_id(r) for r in results]
         except Exception as exc:
-            logger.error("EmbeddingService.search_legal_docs failed: %s", exc)
+            # NOTE: this returns [] on failure, so the caller cannot tell
+            # "no relevant law found" from "retrieval is down". That matters for
+            # a legal assistant — an empty result must not be answered from the
+            # model's own memory. Tracked in docs/KNOWN_ISSUES.md.
+            logger.error(
+                "EmbeddingService.search_legal_docs failed (returning no documents, "
+                "NOT 'no law exists'): %s",
+                exc,
+            )
             return []
 
     # ------------------------------------------------------------------ #

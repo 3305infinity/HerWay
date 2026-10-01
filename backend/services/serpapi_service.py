@@ -42,6 +42,7 @@ from backend.models.research import (
     SearchResult,
     SearchVertical,
 )
+from backend.trace import log_fields
 
 load_dotenv()
 
@@ -149,7 +150,12 @@ class SerpApiCache:
         if key in self._cache:
             timestamp, results = self._cache[key]
             if time.time() - timestamp < self._ttl_seconds:
-                logger.info("SerpApiCache: HIT for key='%s'", key)
+                # The cache key embeds the query text, which derives from the
+                # user's situation. Record the hit, not the content.
+                logger.info(
+                    "SerpApiCache: HIT %s",
+                    log_fields(vertical=vertical, cached_results=len(results)),
+                )
                 return results
             else:
                 del self._cache[key]

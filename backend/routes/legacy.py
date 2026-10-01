@@ -4,8 +4,50 @@ Legacy router — preserves ALL existing Haven endpoints.
 These endpoints are mounted at the root (no /api/v2 prefix) so that the
 existing frontend continues to work without changes.
 
-Every endpoint here is a direct copy of the original ``main.py`` handlers.
-They will be migrated or deprecated in future iterations.
+Security policy (Phase 2)
+=========================
+The Phase 1 audit found twelve of these fourteen endpoints unauthenticated,
+five of them invoking a paid model. Each was classified rather than blanket-
+protected, because several are anonymous **by design**: the community feed
+exists so that a woman can read other women's experiences, and post her own,
+without first creating an account that ties her identity to a disclosure.
+
+============================  ==================  =====================  ==========
+Endpoint                      Classification      Control                Auth
+============================  ==================  =====================  ==========
+POST /text-generation         LLM / paid          LLM budget             no
+POST /img-generation          LLM / paid          LLM budget             no
+POST /text-decomposition      LLM / paid          LLM budget + length    no
+GET  /poem-generation         LLM / paid          LLM budget + length    no
+POST /generate-image          LLM / paid (AWS)    LLM budget             no
+GET  /find-match              LLM / paid (embed)  LLM budget + length    no
+POST /save-extracted-data     Public submission   Submission budget      no
+POST /encode                  Public utility      Utility budget         no
+POST /decode                  Public utility      Utility budget         no
+GET  /get-admin-posts         Public read         Read budget            no
+GET  /get-post/{id}           Public read         Read budget            no
+POST /send-message            External publish    Submission budget      **yes**
+POST /close-issue/{id}        Administrative      Submission budget      **yes**
+POST /upload_embeddings/      Administrative      LLM budget             **yes**
+============================  ==================  =====================  ==========
+
+Why authentication was *not* added to the public ten
+----------------------------------------------------
+Five of the Next.js proxies in front of these routes (`/api/decompose`,
+`/api/generate-text`, `/api/generate-image`, `/api/getPosts`, `/api/save`) do
+not forward credentials, so requiring auth would break the community and
+create-post flows outright. More importantly, anonymity is the product
+decision here. The abuse risk those routes actually carry is cost and volume,
+and a per-caller request budget addresses that without a login wall.
+
+``POST /send-message`` is the exception: it publishes to a public Twitter
+account, is not reachable from the current UI, and an open endpoint that posts
+externally on a domestic-violence product is not defensible. It now requires an
+authenticated identity.
+
+Rate limiting is in-process and per worker — see ``backend.rate_limit`` for
+what that does and does not protect against. Nothing carrying emergency
+information is limited.
 """
 
 from __future__ import annotations
@@ -23,6 +65,17 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from backend.auth import Identity, require_authenticated
 from backend.db import get_database, upload_embeddings_to_mongo
+from backend.rate_limit import (
+    rate_limit_llm,
+    rate_limit_read,
+    rate_limit_submission,
+    rate_limit_utility,
+)
+
+#: Upper bound on free-text sent to a model provider. Generous for a real
+#: disclosure, small enough that a pasted file cannot run up a bill or stall a
+#: worker. Validation happens before the provider is called.
+MAX_TEXT_INPUT_CHARS = 8000
 from backend.schema import FileContent, PostInfo
 from backend.utils.common import (
     load_image_from_url_or_file,
@@ -78,7 +131,7 @@ def _db():
 # Original endpoints — identical behaviour
 # ---------------------------------------------------------------------------
 
-@router.post("/text-generation")
+@router.post("/text-generation", dependencies=[Depends(rate_limit_llm)])
 async def get_post_and_expand_its_content(post_info: PostInfo):
     """Expand user input text for help message generation."""
     try:
@@ -100,7 +153,7 @@ async def get_post_and_expand_its_content(post_info: PostInfo):
         raise HTTPException(status_code=500, detail=f"Error expanding text: {e}")
 
 
-@router.post("/img-generation")
+@router.post("/img-generation", dependencies=[Depends(rate_limit_llm)])
 async def create_image_from_prompt(input_data: str):
     """Generate an image based on a text prompt."""
     try:
@@ -110,15 +163,29 @@ async def create_image_from_prompt(input_data: str):
         raise HTTPException(status_code=500, detail=f"Error generating image: {e}")
 
 
-@router.post("/text-decomposition")
+@router.post("/text-decomposition", dependencies=[Depends(rate_limit_llm)])
 async def decompose_text_content(data: dict):
-    """Decompose and extract information from user text."""
+    """Decompose and extract information from user text.
+
+    Validates before spending a model call: an absent or oversized body used to
+    reach the provider regardless, which is both a cost and a latency problem.
+    """
+    text = (data or {}).get("text") if isinstance(data, dict) else None
+    if not isinstance(text, str) or not text.strip():
+        raise HTTPException(status_code=422, detail="A non-empty 'text' field is required.")
+    if len(text) > MAX_TEXT_INPUT_CHARS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"'text' must be {MAX_TEXT_INPUT_CHARS} characters or fewer.",
+        )
+
     try:
-        text = data.get("text")
         decomposed_text = decompose_user_text(text)
         return {"extracted_data": extract_info(decomposed_text)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error decomposing text: {e}")
+    except Exception:
+        # The raw exception can carry provider detail and the user's own text.
+        logger.exception("Error decomposing text")
+        raise HTTPException(status_code=503, detail="That text could not be processed right now.")
 
 
 #: Keys the community post form is allowed to write. Previously the whole
@@ -137,7 +204,7 @@ _ALLOWED_POST_FIELDS = {
 }
 
 
-@router.post("/save-extracted-data")
+@router.post("/save-extracted-data", dependencies=[Depends(rate_limit_submission)])
 async def save_extracted_data(data: dict):
     """Save an anonymous community post.
 
@@ -171,7 +238,7 @@ async def save_extracted_data(data: dict):
         raise HTTPException(status_code=503, detail="Your post could not be saved right now.")
 
 
-@router.post("/encode")
+@router.post("/encode", dependencies=[Depends(rate_limit_utility)])
 async def encode_text_in_image_endpoint(
     text: str, img_url: str = None, file: UploadFile = File(None)
 ):
@@ -206,7 +273,7 @@ async def encode_text_in_image_endpoint(
         raise HTTPException(status_code=500, detail="Could not encode the message into that image.")
 
 
-@router.post("/decode")
+@router.post("/decode", dependencies=[Depends(rate_limit_utility)])
 async def decode_text_from_image_endpoint(
     img_url: str = None, file: UploadFile = File(None)
 ):
@@ -228,24 +295,52 @@ async def decode_text_from_image_endpoint(
         raise HTTPException(status_code=400, detail="Could not read that image.")
 
 
-@router.get("/poem-generation")
+@router.get("/poem-generation", dependencies=[Depends(rate_limit_llm)])
 async def create_poem_endpoint(text: str):
     """Generate an inspirational poem based on input text."""
+    if not (text or "").strip():
+        raise HTTPException(status_code=422, detail="A non-empty 'text' value is required.")
+    if len(text) > MAX_TEXT_INPUT_CHARS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"'text' must be {MAX_TEXT_INPUT_CHARS} characters or fewer.",
+        )
     try:
         return {"poem": create_poem(text)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating poem: {e}")
+    except Exception:
+        logger.exception("Error generating poem")
+        raise HTTPException(status_code=503, detail="A poem could not be generated right now.")
 
 
-@router.post("/send-message")
-async def send_message_to_twitter_endpoint(image_url: str, caption: str):
-    """Send a message to Twitter."""
+@router.post("/send-message", dependencies=[Depends(rate_limit_submission)])
+async def send_message_to_twitter_endpoint(
+    image_url: str,
+    caption: str,
+    identity: Identity = Depends(require_authenticated),
+):
+    """Publish a message to the configured Twitter account.
+
+    **Requires authentication.** This is the one legacy endpoint that reaches
+    outside HerWay and publishes in public. Leaving it open meant anyone who
+    found the URL could post from the project's account; on a domestic-violence
+    product that is not a risk worth carrying for an endpoint the current UI
+    never calls.
+    """
+    if not (caption or "").strip():
+        raise HTTPException(status_code=422, detail="A caption is required.")
+    if len(caption) > 280:
+        raise HTTPException(
+            status_code=422, detail="A caption cannot be longer than 280 characters."
+        )
+
     try:
         send_message_to_twitter(image_url, caption)
         return {"status": "Message sent successfully"}
-    except Exception as e:
+    except Exception:
+        # The upstream error can contain API credentials; do not echo it.
+        logger.exception("Error sending message to Twitter")
         raise HTTPException(
-            status_code=500, detail=f"Error sending message to Twitter: {e}"
+            status_code=502, detail="The message could not be posted right now."
         )
 
 
@@ -276,7 +371,7 @@ def _public_post(post: dict) -> dict:
     }
 
 
-@router.get("/get-admin-posts")
+@router.get("/get-admin-posts", dependencies=[Depends(rate_limit_read)])
 def get_all_posts():
     """Retrieve community posts with contact details removed."""
     try:
@@ -291,7 +386,7 @@ def get_all_posts():
         )
 
 
-@router.get("/find-match")
+@router.get("/find-match", dependencies=[Depends(rate_limit_llm)])
 def find_top_matching_posts(info: str, collection: str):
     """Find top matches based on embedding similarity.
 
@@ -301,6 +396,13 @@ def find_top_matching_posts(info: str, collection: str):
     """
     if collection not in {"admin", "complains2"}:
         raise HTTPException(status_code=400, detail="Unknown collection")
+    if not (info or "").strip():
+        raise HTTPException(status_code=422, detail="A non-empty 'info' value is required.")
+    if len(info) > MAX_TEXT_INPUT_CHARS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"'info' must be {MAX_TEXT_INPUT_CHARS} characters or fewer.",
+        )
     try:
         description_vector = generate_text_embedding(info)
         top_matches = find_top_matches(_db()[collection], description_vector)
@@ -312,7 +414,7 @@ def find_top_matching_posts(info: str, collection: str):
         raise HTTPException(status_code=503, detail="Matching is unavailable right now.")
 
 
-@router.get("/get-post/{post_id}")
+@router.get("/get-post/{post_id}", dependencies=[Depends(rate_limit_read)])
 def get_post_by_id(post_id: str):
     """Retrieve a specific community post, with contact details removed."""
     try:
@@ -333,7 +435,7 @@ def get_post_by_id(post_id: str):
     return JSONResponse(content=_public_post(post))
 
 
-@router.post("/close-issue/{issue_id}")
+@router.post("/close-issue/{issue_id}", dependencies=[Depends(rate_limit_submission)])
 async def close_issue(issue_id: str, identity: Identity = Depends(require_authenticated)):
     """Mark an issue as closed. Restricted to signed-in users.
 
@@ -361,7 +463,7 @@ async def close_issue(issue_id: str, identity: Identity = Depends(require_authen
     return {"status": "Issue marked as closed"}
 
 
-@router.post("/upload_embeddings/")
+@router.post("/upload_embeddings/", dependencies=[Depends(rate_limit_llm)])
 async def upload_embeddings(identity: Identity = Depends(require_authenticated)):
     """Rebuild the legal-document embedding index.
 
@@ -379,7 +481,7 @@ async def upload_embeddings(identity: Identity = Depends(require_authenticated))
         raise HTTPException(status_code=503, detail="Embedding upload failed.")
 
 
-@router.post("/generate-image")
+@router.post("/generate-image", dependencies=[Depends(rate_limit_llm)])
 async def generate_image(data: dict):
     """Generate an image based on a text prompt using Amazon Bedrock and store it in S3."""
     if not bedrock_client or not s3_client:
