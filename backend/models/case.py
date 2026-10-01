@@ -26,6 +26,7 @@ from backend.models.safety_plan import SafetyPlan
 from backend.models.research import (
     EvidenceItem,
     LocalResource,
+    ResearchDegradation,
     ResearchPlan,
     ResearchTraceEntry,
     Situation,
@@ -70,11 +71,18 @@ class Location(BaseModel):
 
 
 class CaseCreate(BaseModel):
-    """Payload the frontend sends to create a new case."""
-    user_id: Optional[str] = None
+    """Payload the frontend sends to create a new case.
+
+    There is deliberately no ``user_id`` here. Ownership is established from
+    the verified session on the server (see ``backend.auth``); accepting it
+    from the request body let any caller create or claim cases as anyone.
+    """
     situation_text: str = Field(..., min_length=10)
     location: Optional[Location] = None
     category: Optional[str] = None
+    title: Optional[str] = Field(
+        None, max_length=120, description="Optional caller-supplied title"
+    )
 
 
 class CaseUpdate(BaseModel):
@@ -88,6 +96,9 @@ class Case(BaseModel):
     """Full persisted case document in MongoDB."""
     id: Optional[str] = Field(None, alias="_id")
     user_id: Optional[str] = None
+    owner_kind: Optional[str] = Field(
+        None, description="clerk | anonymous — how the owner was identified"
+    )
     title: str = Field("Untitled Case", description="Short title generated from situation")
     category: str = Field("other", description="Primary category")
     situation_text: str
@@ -106,6 +117,12 @@ class Case(BaseModel):
     safety_plan: Optional[SafetyPlan] = Field(None, description="Personalized, adaptive safety plan for women-safety cases")
     local_resources: List[LocalResource] = Field(default_factory=list)
     research_trace: List[ResearchTraceEntry] = Field(default_factory=list)
+    #: Parts of the research that did not complete. Surfaced in the UI so a
+    #: partial result is never presented as a complete one.
+    research_degradations: List[ResearchDegradation] = Field(default_factory=list)
+    research_location_used: Optional[str] = Field(
+        None, description="Location actually used for local search; None if none was given"
+    )
     conversation: List[Dict[str, str]] = Field(
         default_factory=list,
         description='History as [{"role": "user"|"assistant", "content": "..."}]',

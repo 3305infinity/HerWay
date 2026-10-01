@@ -1,12 +1,28 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useUser } from '@clerk/nextjs';
-import ResearchTrailDrawer from '@/components/ResearchTrailDrawer';
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+import ResearchTrailDrawer from '@/components/ResearchTrailDrawer';
+import EvidenceCard from '@/components/EvidenceCard';
+import ResourceCard from '@/components/ResourceCard';
+import LocationPrompt from '@/components/LocationPrompt';
+import {
+  EmptyState,
+  ErrorState,
+  InlineError,
+  LoadingState,
+  PartialResultNotice,
+} from '@/components/States';
+import { apiGet, apiPatch, apiPost, type ApiError } from '@/lib/api';
+import { formatIndianDateTime } from '@/lib/india';
+import type {
+  CaseRecord,
+  ChatReply,
+  MatchedResource,
+  SafetyActionItem,
+} from '@/lib/types';
 
 const WOMEN_SAFETY_CATEGORIES = [
   'domestic_violence',
@@ -21,7 +37,6 @@ const WOMEN_SAFETY_CATEGORIES = [
   'safety',
 ];
 
-// ── Helper: Safety phase config ──────────────────────────────
 const PHASES = [
   {
     key: 'right_now_actions',
@@ -29,7 +44,6 @@ const PHASES = [
     description: 'Do these first — before anything else.',
     color: 'text-red-700 dark:text-red-400',
     dotColor: 'bg-red-500',
-    checkColor: 'accent-red-600',
   },
   {
     key: 'next_24h_actions',
@@ -37,31 +51,27 @@ const PHASES = [
     description: 'Safe practical steps when you have a moment.',
     color: 'text-amber-700 dark:text-amber-400',
     dotColor: 'bg-amber-500',
-    checkColor: 'accent-amber-600',
   },
   {
     key: 'document_safe_actions',
     label: 'If safe to document',
-    description: 'Only if you can do so privately and safely.',
+    description: 'Only if you can do this privately and safely.',
     color: 'text-blue-700 dark:text-blue-400',
     dotColor: 'bg-blue-500',
-    checkColor: 'accent-blue-600',
   },
   {
     key: 'support_network_actions',
     label: 'Support network',
-    description: 'Reach out to people and organisations who can help.',
+    description: 'People and organisations who can help.',
     color: 'text-purple-700 dark:text-purple-400',
     dotColor: 'bg-purple-500',
-    checkColor: 'accent-purple-600',
   },
   {
     key: 'formal_options_actions',
     label: 'Formal and legal options',
-    description: 'When you are ready to take formal steps.',
+    description: 'For when you are ready. These are options, not obligations.',
     color: 'text-emerald-700 dark:text-emerald-400',
     dotColor: 'bg-emerald-500',
-    checkColor: 'accent-emerald-600',
   },
   {
     key: 'ongoing_actions',
@@ -69,381 +79,428 @@ const PHASES = [
     description: 'Things to revisit over time.',
     color: 'text-muted-foreground',
     dotColor: 'bg-muted-foreground/50',
-    checkColor: 'accent-primary',
   },
 ] as const;
+
+type TabId = 'plan' | 'evidence' | 'resources' | 'community';
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  failed?: boolean;
+}
 
 export default function CaseWorkspacePage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useUser();
   const caseId = params?.id as string;
 
-  const [caseData, setCaseData] = useState<any>(null);
+  const [caseData, setCaseData] = useState<CaseRecord | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
 
-  // Drawer & Chat states
   const [isTrailOpen, setIsTrailOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
-  const [chatHistory, setChatHistory] = useState<Array<{ role: string; content: string }>>([]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Tabs for the main content area
-  const [activeTab, setActiveTab] = useState<'plan' | 'evidence' | 'resources' | 'community'>('plan');
+  const [activeTab, setActiveTab] = useState<TabId>('plan');
 
-  // Resource search
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchingResources, setIsSearchingResources] = useState(false);
+  const [resourceNotice, setResourceNotice] = useState<string | null>(null);
+  const [resourceError, setResourceError] = useState<string | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
 
-  // Community capability: results fetched via ChatAgent search_community tool
-  const [communityPosts, setCommunityPosts] = useState<any[]>([]);
+  const [communityPosts, setCommunityPosts] = useState<Array<Record<string, unknown>>>([]);
   const [isLoadingCommunity, setIsLoadingCommunity] = useState(false);
   const [communityLoaded, setCommunityLoaded] = useState(false);
+  const [communityError, setCommunityError] = useState<string | null>(null);
 
-  // Sidebar collapse on mobile
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isRetryingResearch, setIsRetryingResearch] = useState(false);
+  const [researchError, setResearchError] = useState<string | null>(null);
 
-  const loadCase = async () => {
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [showLocationPrompt, setShowLocationPrompt] = useState(false);
+
+  // ── Load ────────────────────────────────────────────────────
+  const loadCase = useCallback(async () => {
     if (!caseId) return;
     setLoading(true);
     setLoadError(null);
-    try {
-      const url = user?.id
-        ? `${API_BASE}/api/v2/cases/${caseId}?user_id=${user.id}`
-        : `${API_BASE}/api/v2/cases/${caseId}`;
-      const res = await fetch(url);
-      if (res.status === 403) {
-        setLoadError("You do not have access to this case. Please sign in with the account that created it.");
-        return;
+
+    const result = await apiGet<CaseRecord>(`/api/v2/cases/${caseId}`);
+    if (result.ok) {
+      setCaseData(result.data);
+      if (result.data.conversation?.length) {
+        setChatHistory(
+          result.data.conversation.map((m) => ({
+            role: m.role === 'user' ? 'user' : 'assistant',
+            content: m.content,
+          })),
+        );
       }
-      if (res.status === 404) {
-        setLoadError("Case not found. It may have been archived or removed.");
-        return;
-      }
-      if (!res.ok) {
-        setLoadError("Unable to load case details right now. Please check your connection and try again.");
-        return;
-      }
-      const data = await res.json();
-      setCaseData(data);
-      if (data.conversation) setChatHistory(data.conversation);
-    } catch (err) {
-      console.error('Failed to load case:', err);
-      setLoadError("Unable to connect to HerWay servers. Please check your connection and try again.");
-    } finally {
-      setLoading(false);
+    } else {
+      setLoadError(result.error);
     }
-  };
+    setLoading(false);
+  }, [caseId]);
 
-  useEffect(() => { loadCase(); }, [caseId, user?.id]);
+  useEffect(() => {
+    void loadCase();
+  }, [loadCase]);
 
-  const toggleSafetyAction = async (actionId: string, currentStatus: string) => {
-    if (!caseData?.safety_plan) return;
-    const newStatus = currentStatus === 'completed' ? 'todo' : 'completed';
-    const updateList = (list: any[]) =>
-      (list || []).map((a: any) =>
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory, isChatLoading]);
+
+  // ── Actions ─────────────────────────────────────────────────
+  const toggleAction = async (actionId: string, nextStatus: string) => {
+    if (!caseData) return;
+    setActionError(null);
+
+    const snapshot = caseData;
+    const updateList = (list?: SafetyActionItem[]) =>
+      (list ?? []).map((a) =>
         a.id === actionId
-          ? { ...a, status: newStatus, completed_at: newStatus === 'completed' ? new Date().toISOString() : null }
-          : a
+          ? {
+              ...a,
+              status: nextStatus,
+              completed_at: nextStatus === 'completed' ? new Date().toISOString() : null,
+            }
+          : a,
       );
-    const updatedPlan = {
-      ...caseData.safety_plan,
-      actions: updateList(caseData.safety_plan.actions),
-      right_now_actions: updateList(caseData.safety_plan.right_now_actions),
-      next_24h_actions: updateList(caseData.safety_plan.next_24h_actions),
-      document_safe_actions: updateList(caseData.safety_plan.document_safe_actions),
-      support_network_actions: updateList(caseData.safety_plan.support_network_actions),
-      formal_options_actions: updateList(caseData.safety_plan.formal_options_actions),
-      ongoing_actions: updateList(caseData.safety_plan.ongoing_actions),
-    };
-    setCaseData({ ...caseData, safety_plan: updatedPlan });
-    try {
-      const url = user?.id
-        ? `${API_BASE}/api/v2/cases/${caseId}/actions/${actionId}?user_id=${user.id}`
-        : `${API_BASE}/api/v2/cases/${caseId}/actions/${actionId}`;
-      await fetch(url, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+
+    // Optimistic update, reverted if the server rejects it.
+    if (caseData.safety_plan) {
+      const plan = caseData.safety_plan;
+      setCaseData({
+        ...caseData,
+        safety_plan: {
+          ...plan,
+          actions: updateList(plan.actions),
+          right_now_actions: updateList(plan.right_now_actions),
+          next_24h_actions: updateList(plan.next_24h_actions),
+          document_safe_actions: updateList(plan.document_safe_actions),
+          support_network_actions: updateList(plan.support_network_actions),
+          formal_options_actions: updateList(plan.formal_options_actions),
+          ongoing_actions: updateList(plan.ongoing_actions),
+        },
       });
-    } catch (err) {
-      console.error('Failed to toggle safety action:', err);
+    } else if (caseData.action_plan) {
+      setCaseData({
+        ...caseData,
+        action_plan: {
+          ...caseData.action_plan,
+          actions: (caseData.action_plan.actions ?? []).map((a) =>
+            a.id === actionId
+              ? { ...a, status: nextStatus, completed: nextStatus === 'completed' }
+              : a,
+          ),
+        },
+      });
+    }
+
+    const result = await apiPatch(`/api/v2/cases/${caseId}/actions/${actionId}`, {
+      status: nextStatus,
+    });
+
+    if (!result.ok) {
+      // Never leave a tick on screen that was not saved.
+      setCaseData(snapshot);
+      setActionError(`${result.error.message} Your step was not saved.`);
     }
   };
 
-  const toggleStandardAction = async (actionId: string, currentCompleted: boolean) => {
-    if (!caseData?.action_plan) return;
-    const newStatus = !currentCompleted ? 'completed' : 'todo';
-    const updatedActions = (caseData.action_plan.actions || []).map((act: any) =>
-      act.id === actionId ? { ...act, completed: !currentCompleted, status: newStatus } : act
-    );
-    setCaseData({ ...caseData, action_plan: { ...caseData.action_plan, actions: updatedActions } });
-    try {
-      const url = user?.id
-        ? `${API_BASE}/api/v2/cases/${caseId}/actions/${actionId}?user_id=${user.id}`
-        : `${API_BASE}/api/v2/cases/${caseId}/actions/${actionId}`;
-      await fetch(url, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-    } catch (err) {
-      console.error('Failed to update action:', err);
+  const retryResearch = async () => {
+    setIsRetryingResearch(true);
+    setResearchError(null);
+
+    const result = await apiPost(`/api/v2/research/${caseId}/run`, undefined, 180_000);
+    if (result.ok) {
+      await loadCase();
+    } else {
+      setResearchError(result.error.message);
     }
+    setIsRetryingResearch(false);
   };
 
   const handleSearchMoreResources = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchQuery.trim()) return;
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    const location = caseData?.situation?.location || caseData?.location_context || '';
+    if (!location) {
+      setShowLocationPrompt(true);
+      return;
+    }
+
     setIsSearchingResources(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/v2/cases/${caseId}/safety-plan/research-more`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: searchQuery.trim(),
-          location: caseData?.situation?.location || caseData?.location_context || '',
-          vertical: 'maps',
-        }),
-      });
-      if (res.ok) {
-        setSearchQuery('');
-        await loadCase();
-      }
-    } catch (err) {
-      console.error('Resource search error:', err);
-    } finally {
-      setIsSearchingResources(false);
+    setResourceError(null);
+    setResourceNotice(null);
+
+    const result = await apiPost<{ message: string; new_resources_added: number }>(
+      `/api/v2/cases/${caseId}/safety-plan/research-more`,
+      { query, location, vertical: 'maps' },
+    );
+
+    if (result.ok) {
+      setSearchQuery('');
+      setResourceNotice(result.data.message);
+      if (result.data.new_resources_added > 0) await loadCase();
+    } else {
+      setResourceError(result.error.message);
+    }
+    setIsSearchingResources(false);
+  };
+
+  const saveLocation = async (location: string) => {
+    const result = await apiPatch(`/api/v2/cases/${caseId}`, { location_context: location });
+    if (result.ok) {
+      setShowLocationPrompt(false);
+      await loadCase();
+    } else {
+      setResourceError(result.error.message);
     }
   };
 
-  const handleSendChat = async (e?: React.FormEvent, customMsg?: string) => {
+  const sendChat = async (e?: React.FormEvent, customMsg?: string) => {
     if (e) e.preventDefault();
-    const userMsg = (customMsg || chatMessage).trim();
-    if (!userMsg) return;
+    const userMsg = (customMsg ?? chatMessage).trim();
+    if (!userMsg || isChatLoading) return;
+
     setChatMessage('');
+    setChatError(null);
     setChatHistory((prev) => [...prev, { role: 'user', content: userMsg }]);
     setIsChatLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/v2/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ case_id: caseId, message: userMsg, history: chatHistory }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setChatHistory((prev) => [...prev, { role: 'assistant', content: data.reply }]);
-        if (data.plan_adapted || data.safety_plan) await loadCase();
+
+    const result = await apiPost<ChatReply>('/api/v2/chat', {
+      case_id: caseId,
+      message: userMsg,
+      history: chatHistory.filter((m) => !m.failed).slice(-12),
+    });
+
+    if (result.ok) {
+      setChatHistory((prev) => [...prev, { role: 'assistant', content: result.data.reply }]);
+      if (result.data.community_posts?.length) {
+        setCommunityPosts(result.data.community_posts);
+        setCommunityLoaded(true);
       }
-    } catch (err) {
-      console.error('Chat error:', err);
-    } finally {
-      setIsChatLoading(false);
+      if (result.data.plan_adapted) await loadCase();
+    } else {
+      // Say the message failed. Do not invent a reply.
+      setChatError(result.error.message);
+      setChatHistory((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            'I could not answer that just now. Nothing you wrote has been lost. ' +
+            'If this is urgent, call 112, or 181 for the women helpline.',
+          failed: true,
+        },
+      ]);
     }
+    setIsChatLoading(false);
   };
 
-  // Fetch community posts similar to this case via ChatAgent search_community tool
-  const loadCommunityPosts = async () => {
+  const loadCommunityPosts = useCallback(async () => {
     if (communityLoaded || !caseData) return;
     setIsLoadingCommunity(true);
-    try {
-      const query = caseData.situation?.case_summary || caseData.situation_text || '';
-      const res = await fetch(`${API_BASE}/api/v2/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          case_id: caseId,
-          message: `Find similar community posts for: ${query.slice(0, 200)}`,
-          history: [],
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.community_posts) setCommunityPosts(data.community_posts);
-      }
-    } catch (err) {
-      console.error('Community posts load error:', err);
-    } finally {
-      setIsLoadingCommunity(false);
-      setCommunityLoaded(true);
-    }
-  };
+    setCommunityError(null);
 
-  // Load community posts when tab is opened
+    const query = caseData.situation?.case_summary || caseData.situation_text || '';
+    const result = await apiPost<ChatReply>('/api/v2/chat', {
+      case_id: caseId,
+      message: `Find similar community posts for: ${query.slice(0, 200)}`,
+      history: [],
+    });
+
+    if (result.ok) {
+      setCommunityPosts(result.data.community_posts ?? []);
+    } else {
+      setCommunityError(result.error.message);
+    }
+    setIsLoadingCommunity(false);
+    setCommunityLoaded(true);
+  }, [caseId, caseData, communityLoaded]);
+
   useEffect(() => {
-    if (activeTab === 'community' && !communityLoaded) {
-      loadCommunityPosts();
+    if (activeTab === 'community' && !communityLoaded && caseData) {
+      void loadCommunityPosts();
     }
-  }, [activeTab]);
+  }, [activeTab, communityLoaded, caseData, loadCommunityPosts]);
 
-  // ── Loading & error states ─────────────────────────────────
+  // ── Loading / error ─────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="w-6 h-6 border-2 border-border border-t-primary rounded-full animate-spin mx-auto" aria-hidden="true" />
-          <p className="text-sm text-muted-foreground">Loading your case…</p>
-        </div>
+      <div className="min-h-[calc(100vh-3.5rem)] max-w-3xl mx-auto w-full p-6 space-y-4">
+        <p className="text-sm text-muted-foreground">Loading your case…</p>
+        <LoadingState label="Loading your case" rows={4} />
       </div>
     );
   }
 
   if (!caseData) {
+    const is403 = loadError?.status === 403;
+    const is404 = loadError?.status === 404;
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 space-y-4 text-center max-w-md mx-auto">
-        <p className="text-foreground font-medium text-base">
-          {loadError || "Case not found."}
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-          <button
-            type="button"
-            suppressHydrationWarning
-            onClick={loadCase}
-            className="w-full sm:w-auto px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
+      <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
+        <div className="max-w-md w-full">
+          <ErrorState
+            title={
+              is403
+                ? 'This case is not yours to open'
+                : is404
+                ? 'We could not find that case'
+                : 'That case did not load'
+            }
+            message={
+              is403
+                ? 'This case belongs to a different account or browser session. If you created it while signed in, sign in with that account.'
+                : is404
+                ? 'It may have been archived, or the link may be incomplete.'
+                : (loadError?.message ?? 'Please check your connection and try again.')
+            }
+            onRetry={loadError?.retryable ? () => void loadCase() : undefined}
           >
-            Retry
-          </button>
-          <button
-            type="button"
-            suppressHydrationWarning
-            onClick={() => router.push('/cases')}
-            className="w-full sm:w-auto px-4 py-2 bg-secondary text-secondary-foreground text-sm font-medium rounded-lg hover:bg-secondary/80 transition-colors border border-border"
-          >
-            Back to my cases
-          </button>
+            <button
+              type="button"
+              onClick={() => router.push('/cases')}
+              className="px-4 py-2 rounded-lg border border-border text-foreground text-sm font-medium hover:bg-muted transition-colors"
+            >
+              Back to my cases
+            </button>
+          </ErrorState>
         </div>
       </div>
     );
   }
 
+  // ── Derived ─────────────────────────────────────────────────
   const category = (caseData.category || '').toLowerCase();
   const isSafetyMode =
     WOMEN_SAFETY_CATEGORIES.some((c) => category.includes(c)) || !!caseData.safety_plan;
-  const situation = caseData.situation || {};
-  const evidenceList = caseData.evidence || [];
-  const actionPlan = caseData.action_plan || {};
-  const safetyPlan = caseData.safety_plan || null;
-  const localResources = caseData.local_resources || [];
-  const trace = caseData.research_trace || [];
-  const assessment = safetyPlan?.assessment || null;
-  const allResources = safetyPlan?.matched_resources || localResources;
+  const situation = caseData.situation;
+  const evidenceList = caseData.evidence ?? [];
+  const actionPlan = caseData.action_plan;
+  const safetyPlan = caseData.safety_plan;
+  const trace = caseData.research_trace ?? [];
+  const degradations = caseData.research_degradations ?? [];
+  const assessment = safetyPlan?.assessment;
 
-  const totalSafetyActions = safetyPlan?.actions?.length || 0;
+  const localAsMatched: MatchedResource[] = (caseData.local_resources ?? []).map((r, i) => ({
+    id: r.id ?? `local_${i}`,
+    name: r.name,
+    category: r.type ?? 'support',
+    phone: r.phone,
+    address: r.address,
+    url: r.website,
+    operating_hours: r.hours,
+    rating: r.rating,
+    verification: r.verification,
+    verification_note: r.verification_note,
+    notes: r.relevance_reason,
+    source_domain: r.source_domain,
+    retrieved_at: r.retrieved_at,
+  }));
+  const allResources: MatchedResource[] =
+    safetyPlan?.matched_resources?.length ? safetyPlan.matched_resources : localAsMatched;
+
+  const totalSafetyActions = safetyPlan?.actions?.length ?? 0;
   const completedSafetyActions =
-    safetyPlan?.actions?.filter((a: any) => a.status === 'completed').length || 0;
+    safetyPlan?.actions?.filter((a) => a.status === 'completed').length ?? 0;
+  const totalStdActions = actionPlan?.actions?.length ?? 0;
+  const completedStdActions =
+    actionPlan?.actions?.filter((a) => a.completed).length ?? 0;
 
-  const totalStdActions = actionPlan.actions?.length || 0;
-  const completedStdActions = actionPlan.actions?.filter((a: any) => a.completed).length || 0;
+  const hasNoResearch = trace.length === 0 && evidenceList.length === 0;
+  const knownLocation = situation?.location || caseData.location_context || null;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-
-      {/* ── Emergency helpline strip (safety cases only) ─────── */}
       {isSafetyMode && (
         <div className="bg-red-700 dark:bg-red-900 text-white px-4 py-2.5">
           <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
-            <span className="font-medium">Emergency contacts</span>
+            <span className="font-medium">In danger right now?</span>
             <div className="flex items-center gap-4 font-mono font-semibold flex-wrap">
-              <a href="tel:112" className="hover:underline" aria-label="Call 112 Emergency">
-                112 Emergency
-              </a>
-              <a href="tel:181" className="hover:underline" aria-label="Call 181 Women Helpline">
-                181 Women Helpline
-              </a>
-              <a href="tel:1091" className="hover:underline" aria-label="Call 1091 Women Police">
-                1091 Women Police
-              </a>
+              <a href="tel:112" className="hover:underline">112 Emergency</a>
+              <a href="tel:181" className="hover:underline">181 Women Helpline</a>
+              <a href="tel:1091" className="hover:underline">1091 Women Police</a>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Page header ───────────────────────────────────────── */}
+      {/* Header */}
       <header className="border-b border-border bg-background px-4 sm:px-6 py-4 sticky top-14 z-40">
-        <div className="max-w-5xl mx-auto flex items-start sm:items-center justify-between gap-4">
-          <div className="space-y-0.5">
+        <div className="max-w-5xl mx-auto flex items-start sm:items-center justify-between gap-4 flex-wrap">
+          <div className="space-y-0.5 min-w-0">
             <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
               <button
                 onClick={() => router.push('/cases')}
                 className="hover:text-foreground transition-colors"
               >
-                My Cases
+                My cases
               </button>
               <span aria-hidden="true">/</span>
               <span className="capitalize">
-                {(caseData.category || 'dispute').replace(/_/g, ' ')}
+                {(caseData.category || 'case').replace(/_/g, ' ')}
               </span>
-              {safetyPlan?.updated_at && (
+              {caseData.updated_at && (
                 <>
                   <span aria-hidden="true">·</span>
-                  <span>
-                    Updated{' '}
-                    {new Date(safetyPlan.updated_at).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
+                  <span>Updated {formatIndianDateTime(caseData.updated_at)}</span>
                 </>
               )}
             </div>
             <h1 className="text-lg sm:text-xl font-semibold text-foreground leading-tight">
-              {caseData.title || 'Case Workspace'}
+              {caseData.title || 'Case workspace'}
             </h1>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {safetyPlan?.updates_history?.length > 0 && (
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            {(safetyPlan?.updates_history?.length ?? 0) > 0 && (
               <button
                 onClick={() => setShowHistoryModal(true)}
                 className="px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
-                aria-label={`View ${safetyPlan.updates_history.length} plan updates`}
               >
-                Plan updated ({safetyPlan.updates_history.length})
+                Plan updated ({safetyPlan!.updates_history!.length})
               </button>
             )}
-
-            {/* ── Original Haven capabilities — quick-access links ─── */}
             {isSafetyMode && (
               <Link
                 href={`/therapybot?case_id=${caseId}`}
-                id="case-talk-to-niva-btn"
                 className="px-3 py-1.5 text-xs font-medium text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors whitespace-nowrap"
-                aria-label="Talk to Niva, HerWay emotional support companion"
               >
-                💜 Talk to Niva
+                Talk to Niva
               </Link>
             )}
             <Link
               href={`/lawbot?case_id=${caseId}`}
-              id="case-legal-help-btn"
               className="px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors whitespace-nowrap"
-              aria-label="Get legal information via LawBot"
             >
-              ⚖️ Legal Help
+              Legal help
             </Link>
             <Link
-              href="/create-post"
-              id="case-discreet-msg-btn"
+              href="/discreet-message"
               className="px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors whitespace-nowrap hidden sm:inline-flex"
-              aria-label="Send a discreet message using steganography"
             >
-              🔒 Discreet Message
+              Discreet message
             </Link>
-
             <button
               onClick={() => setIsTrailOpen(true)}
               className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/50 hover:bg-muted border border-border rounded-lg transition-colors"
-              aria-label="See how HerWay researched this case"
             >
               How we researched this
             </button>
             <button
               onClick={() => setIsChatOpen(true)}
               className="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-              aria-label="Open HerWay assistant"
             >
               Ask HerWay
             </button>
@@ -451,48 +508,65 @@ export default function CaseWorkspacePage() {
         </div>
       </header>
 
-      {/* ── Plan-updated banner ───────────────────────────────── */}
-      {safetyPlan?.updates_history?.length > 0 && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 px-4 sm:px-6 py-3">
-          <div className="max-w-5xl mx-auto flex items-start justify-between gap-4 text-xs">
-            <p className="text-amber-800 dark:text-amber-300">
-              <span className="font-semibold">Plan updated:</span>{' '}
-              {safetyPlan.updates_history[safetyPlan.updates_history.length - 1].why_plan_changed}
-            </p>
-            <button
-              onClick={() => setShowHistoryModal(true)}
-              className="text-amber-700 dark:text-amber-300 font-medium hover:underline shrink-0"
-            >
-              View changes →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Main content ──────────────────────────────────────── */}
       <div className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8">
-
-          {/* Primary column */}
           <div className="space-y-6 min-w-0">
+            {/* Honest reporting of incomplete research */}
+            {degradations.length > 0 && (
+              <PartialResultNotice
+                messages={degradations.map((d) => d.user_message)}
+                onRetry={isRetryingResearch ? undefined : () => void retryResearch()}
+              />
+            )}
 
-            {/* Situation summary */}
+            {researchError && (
+              <InlineError message={researchError} onDismiss={() => setResearchError(null)} />
+            )}
+            {actionError && (
+              <InlineError message={actionError} onDismiss={() => setActionError(null)} />
+            )}
+
+            {hasNoResearch && (
+              <EmptyState
+                title="No research has been run on this case yet"
+                message="HerWay has not yet searched for verified resources or built a plan for this situation."
+              >
+                <button
+                  type="button"
+                  onClick={() => void retryResearch()}
+                  disabled={isRetryingResearch}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                >
+                  {isRetryingResearch ? 'Researching…' : 'Run research now'}
+                </button>
+              </EmptyState>
+            )}
+
+            {/* Situation */}
             <div className="space-y-2">
               <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Situation
               </h2>
               <p className="text-sm text-foreground leading-relaxed">
-                {situation.case_summary || caseData.situation_text}
+                {situation?.case_summary || caseData.situation_text}
               </p>
-              {situation.user_goal && (
+              {situation?.user_goal && (
                 <p className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">Goal:</span>{' '}
-                  {situation.user_goal}
+                  <span className="font-medium text-foreground">Goal:</span> {situation.user_goal}
                 </p>
+              )}
+              {!knownLocation && (
+                <button
+                  type="button"
+                  onClick={() => setShowLocationPrompt(true)}
+                  className="text-xs text-primary hover:underline font-medium"
+                >
+                  Add your city or district to find support near you →
+                </button>
               )}
             </div>
 
-            {/* Safety assessment — collapsible indicators, not a grid of 10 boxes */}
+            {/* Safety assessment */}
             {assessment && isSafetyMode && (
               <details className="border border-border rounded-xl overflow-hidden">
                 <summary className="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-muted/30 transition-colors list-none">
@@ -509,55 +583,62 @@ export default function CaseWorkspacePage() {
                         .join(' · ') || 'Review indicators'}
                     </span>
                   </div>
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-muted-foreground" aria-hidden="true">
-                    <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+                  <span aria-hidden="true" className="text-muted-foreground text-xs">▾</span>
                 </summary>
                 <div className="px-5 pb-5 pt-3 border-t border-border/50 space-y-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {assessment.context_summary}
+                  </p>
                   <div className="space-y-1.5">
-                    {[
-                      { key: 'immediate_safety_concern', label: 'Immediate danger' },
-                      { key: 'threats_present', label: 'Threats present' },
-                      { key: 'escalating_behavior', label: 'Escalating pattern' },
-                      { key: 'repeated_harassment', label: 'Recurring harassment' },
-                      { key: 'digital_safety_concern', label: 'Device or digital risk' },
-                      { key: 'financial_dependence', label: 'Financial control' },
-                      { key: 'presence_of_dependents', label: 'Children or dependents involved' },
-                      { key: 'workplace_harassment', label: 'Workplace or POSH related' },
-                      { key: 'safe_place_available', label: 'Safe place identified' },
-                      { key: 'support_available', label: 'Support network available' },
-                    ]
-                      .filter((item) => assessment[item.key] !== undefined)
-                      .map((item) => (
-                        <div key={item.key} className="flex items-start gap-2.5 text-sm">
+                    {(
+                      [
+                        ['immediate_safety_concern', 'Immediate danger'],
+                        ['threats_present', 'Threats present'],
+                        ['escalating_behavior', 'Escalating pattern'],
+                        ['repeated_harassment', 'Recurring harassment'],
+                        ['digital_safety_concern', 'Device or digital risk'],
+                        ['financial_dependence', 'Financial control'],
+                        ['presence_of_dependents', 'Children or dependents involved'],
+                        ['workplace_harassment', 'Workplace or POSH related'],
+                        ['safe_place_available', 'Safe place identified'],
+                        ['support_available', 'Support network available'],
+                      ] as const
+                    ).map(([key, label]) => {
+                      const active = Boolean(assessment[key]);
+                      const positive = key === 'safe_place_available' || key === 'support_available';
+                      return (
+                        <div key={key} className="flex items-start gap-2.5 text-sm">
                           <span
                             className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                              assessment[item.key]
-                                ? item.key === 'safe_place_available' || item.key === 'support_available'
+                              active
+                                ? positive
                                   ? 'bg-emerald-500'
                                   : 'bg-red-500'
                                 : 'bg-muted-foreground/20'
                             }`}
                             aria-hidden="true"
                           />
-                          <span className={assessment[item.key] ? 'text-foreground' : 'text-muted-foreground/60'}>
-                            {item.label}
-                            {assessment[item.key] && assessment.indicator_justifications?.[item.key] && (
+                          <span className={active ? 'text-foreground' : 'text-muted-foreground/60'}>
+                            {label}
+                            {active && assessment.indicator_justifications?.[key] && (
                               <span className="text-muted-foreground font-normal">
                                 {' — '}
-                                <em>{assessment.indicator_justifications[item.key]}</em>
+                                <em>{assessment.indicator_justifications[key]}</em>
                               </span>
                             )}
                           </span>
                         </div>
-                      ))}
+                      );
+                    })}
                   </div>
-                  {assessment.critical_safety_notes?.length > 0 && (
+                  {(assessment.critical_safety_notes?.length ?? 0) > 0 && (
                     <div className="pt-2 border-t border-border/50 space-y-1">
-                      <p className="text-xs font-medium text-red-700 dark:text-red-400">Important notes</p>
+                      <p className="text-xs font-medium text-red-700 dark:text-red-400">
+                        Important
+                      </p>
                       <ul className="space-y-1">
-                        {assessment.critical_safety_notes.map((note: string, idx: number) => (
-                          <li key={idx} className="text-sm text-muted-foreground leading-relaxed">
+                        {assessment.critical_safety_notes!.map((note, i) => (
+                          <li key={i} className="text-sm text-muted-foreground leading-relaxed">
                             {note}
                           </li>
                         ))}
@@ -568,14 +649,34 @@ export default function CaseWorkspacePage() {
               </details>
             )}
 
-            {/* Tab bar — original tabs + Community (existing Haven capability) */}
+            {/* Tabs */}
             <div className="border-b border-border" role="tablist">
-              {([
-                { id: 'plan', label: isSafetyMode ? 'Safety plan' : 'Action plan', count: isSafetyMode ? `${completedSafetyActions}/${totalSafetyActions}` : `${completedStdActions}/${totalStdActions}` },
-                { id: 'evidence', label: 'Sources', count: evidenceList.length > 0 ? String(evidenceList.length) : undefined },
-                { id: 'resources', label: 'Resources', count: allResources.length > 0 ? String(allResources.length) : undefined },
-                { id: 'community', label: 'Community', count: communityPosts.length > 0 ? String(communityPosts.length) : undefined },
-              ] as const).map((tab) => (
+              {(
+                [
+                  {
+                    id: 'plan' as const,
+                    label: isSafetyMode ? 'Safety plan' : 'Action plan',
+                    count: isSafetyMode
+                      ? `${completedSafetyActions}/${totalSafetyActions}`
+                      : `${completedStdActions}/${totalStdActions}`,
+                  },
+                  {
+                    id: 'evidence' as const,
+                    label: 'Sources',
+                    count: evidenceList.length ? String(evidenceList.length) : undefined,
+                  },
+                  {
+                    id: 'resources' as const,
+                    label: 'Resources',
+                    count: allResources.length ? String(allResources.length) : undefined,
+                  },
+                  {
+                    id: 'community' as const,
+                    label: 'Community',
+                    count: communityPosts.length ? String(communityPosts.length) : undefined,
+                  },
+                ]
+              ).map((tab) => (
                 <button
                   key={tab.id}
                   role="tab"
@@ -595,101 +696,115 @@ export default function CaseWorkspacePage() {
               ))}
             </div>
 
-            {/* ── TAB: Safety / Action Plan ────────────────────── */}
+            {/* Plan tab */}
             {activeTab === 'plan' && (
               <div className="space-y-8">
                 {safetyPlan ? (
-                  PHASES.map((phase) => {
-                    const actions = safetyPlan[phase.key] || [];
-                    if (actions.length === 0) return null;
-                    const doneCount = actions.filter((a: any) => a.status === 'completed').length;
-                    return (
-                      <div key={phase.key} className="space-y-1">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full ${phase.dotColor} shrink-0`} aria-hidden="true" />
-                            <h3 className={`text-sm font-semibold ${phase.color}`}>
-                              {phase.label}
-                            </h3>
+                  <>
+                    {PHASES.map((phase) => {
+                      const actions = (safetyPlan[phase.key] ?? []) as SafetyActionItem[];
+                      if (actions.length === 0) return null;
+                      const doneCount = actions.filter((a) => a.status === 'completed').length;
+                      return (
+                        <div key={phase.key} className="space-y-1">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${phase.dotColor} shrink-0`} aria-hidden="true" />
+                              <h3 className={`text-sm font-semibold ${phase.color}`}>{phase.label}</h3>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {doneCount}/{actions.length}
+                            </span>
                           </div>
-                          <span className="text-xs text-muted-foreground">
-                            {doneCount}/{actions.length}
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mb-3 ml-4">{phase.description}</p>
+                          <p className="text-xs text-muted-foreground mb-3 ml-4">{phase.description}</p>
 
-                        {/* Actions as checklist rows, not individual cards */}
-                        <div className="ml-4 border border-border/60 rounded-xl overflow-hidden divide-y divide-border/60">
-                          {actions.map((act: any) => (
-                            <label
-                              key={act.id}
-                              className={`flex items-start gap-3 px-4 py-3.5 cursor-pointer hover:bg-muted/20 transition-colors ${
-                                act.status === 'completed' ? 'bg-muted/10' : 'bg-card'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={act.status === 'completed'}
-                                onChange={() => toggleSafetyAction(act.id, act.status)}
-                                className={`mt-0.5 w-4 h-4 rounded border-input ${phase.checkColor} cursor-pointer shrink-0`}
-                                aria-label={`Mark "${act.title}" as ${act.status === 'completed' ? 'incomplete' : 'complete'}`}
-                              />
-                              <div className="flex-1 min-w-0 space-y-0.5">
-                                <p className={`text-sm font-medium leading-snug ${
-                                  act.status === 'completed'
-                                    ? 'line-through text-muted-foreground'
-                                    : 'text-foreground'
-                                }`}>
-                                  {act.title}
-                                </p>
-                                {act.description && (
-                                  <p className={`text-xs leading-relaxed ${
-                                    act.status === 'completed' ? 'text-muted-foreground/60' : 'text-muted-foreground'
-                                  }`}>
-                                    {act.description}
+                          <div className="ml-4 border border-border/60 rounded-xl overflow-hidden divide-y divide-border/60">
+                            {actions.map((act) => (
+                              <label
+                                key={act.id}
+                                className={`flex items-start gap-3 px-4 py-3.5 cursor-pointer hover:bg-muted/20 transition-colors ${
+                                  act.status === 'completed' ? 'bg-muted/10' : 'bg-card'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={act.status === 'completed'}
+                                  onChange={() =>
+                                    void toggleAction(
+                                      act.id,
+                                      act.status === 'completed' ? 'todo' : 'completed',
+                                    )
+                                  }
+                                  className="mt-0.5 w-4 h-4 rounded border-input accent-primary cursor-pointer shrink-0"
+                                  aria-label={`Mark "${act.title}" as ${
+                                    act.status === 'completed' ? 'not done' : 'done'
+                                  }`}
+                                />
+                                <div className="flex-1 min-w-0 space-y-0.5">
+                                  <p
+                                    className={`text-sm font-medium leading-snug ${
+                                      act.status === 'completed'
+                                        ? 'line-through text-muted-foreground'
+                                        : 'text-foreground'
+                                    }`}
+                                  >
+                                    {act.title}
                                   </p>
-                                )}
-                                {act.safety_caveat && (
-                                  <p className="text-xs text-red-600 dark:text-red-400 font-medium">
-                                    ⚠ {act.safety_caveat}
-                                  </p>
-                                )}
-                                {/* Evidence links — subtle */}
-                                {act.evidence_ids?.length > 0 && (
-                                  <div className="flex items-center gap-1 flex-wrap pt-0.5">
-                                    {act.evidence_ids.slice(0, 2).map((eid: string) => {
-                                      const ev = evidenceList.find((e: any) => e.id === eid);
-                                      return ev?.url ? (
-                                        <a
-                                          key={eid}
-                                          href={ev.url}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className="text-[10px] text-primary hover:underline"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          Source ↗
-                                        </a>
-                                      ) : null;
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            </label>
-                          ))}
+                                  {act.description && (
+                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                      {act.description}
+                                    </p>
+                                  )}
+                                  {act.safety_caveat && (
+                                    <p className="text-xs text-red-600 dark:text-red-400 font-medium">
+                                      {act.safety_caveat}
+                                    </p>
+                                  )}
+                                  {(act.evidence_ids?.length ?? 0) > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        setActiveTab('evidence');
+                                      }}
+                                      className="text-[11px] text-primary hover:underline"
+                                    >
+                                      Why this step? See the source →
+                                    </button>
+                                  )}
+                                </div>
+                              </label>
+                            ))}
+                          </div>
                         </div>
+                      );
+                    })}
+
+                    {(safetyPlan.things_to_avoid?.length ?? 0) > 0 && (
+                      <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 space-y-1.5">
+                        <p className="text-xs font-semibold text-red-700 dark:text-red-400">
+                          Please avoid
+                        </p>
+                        <ul className="space-y-1">
+                          {safetyPlan.things_to_avoid!.map((t, i) => (
+                            <li key={i} className="text-sm text-muted-foreground leading-relaxed">
+                              {t}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                    );
-                  })
-                ) : (
-                  /* Standard (non-safety) action plan */
-                  <div className="border border-border/60 rounded-xl overflow-hidden divide-y divide-border/60">
-                    {(actionPlan.actions || []).length === 0 ? (
-                      <div className="p-6 text-center text-sm text-muted-foreground">
-                        No actions generated yet.
-                      </div>
-                    ) : (
-                      (actionPlan.actions || []).map((act: any) => (
+                    )}
+
+                    {safetyPlan.disclaimer && (
+                      <p className="text-xs text-muted-foreground leading-relaxed border-t border-border pt-4">
+                        {safetyPlan.disclaimer}
+                      </p>
+                    )}
+                  </>
+                ) : (actionPlan?.actions?.length ?? 0) > 0 ? (
+                  <>
+                    <div className="border border-border/60 rounded-xl overflow-hidden divide-y divide-border/60">
+                      {actionPlan!.actions!.map((act) => (
                         <label
                           key={act.id}
                           className={`flex items-start gap-3 px-4 py-3.5 cursor-pointer hover:bg-muted/20 transition-colors ${
@@ -698,15 +813,19 @@ export default function CaseWorkspacePage() {
                         >
                           <input
                             type="checkbox"
-                            checked={!!act.completed}
-                            onChange={() => toggleStandardAction(act.id, !!act.completed)}
+                            checked={Boolean(act.completed)}
+                            onChange={() =>
+                              void toggleAction(act.id, act.completed ? 'todo' : 'completed')
+                            }
                             className="mt-0.5 w-4 h-4 rounded border-input accent-primary cursor-pointer shrink-0"
-                            aria-label={`Mark "${act.title}" as ${act.completed ? 'incomplete' : 'complete'}`}
+                            aria-label={`Mark "${act.title}" as ${act.completed ? 'not done' : 'done'}`}
                           />
                           <div className="flex-1 min-w-0 space-y-0.5">
-                            <p className={`text-sm font-medium leading-snug ${
-                              act.completed ? 'line-through text-muted-foreground' : 'text-foreground'
-                            }`}>
+                            <p
+                              className={`text-sm font-medium leading-snug ${
+                                act.completed ? 'line-through text-muted-foreground' : 'text-foreground'
+                              }`}
+                            >
                               {act.title}
                             </p>
                             {act.description && (
@@ -716,82 +835,60 @@ export default function CaseWorkspacePage() {
                             )}
                           </div>
                         </label>
-                      ))
+                      ))}
+                    </div>
+                    {actionPlan?.disclaimer && (
+                      <p className="text-xs text-muted-foreground leading-relaxed border-t border-border pt-4">
+                        {actionPlan.disclaimer}
+                      </p>
                     )}
-                  </div>
+                  </>
+                ) : (
+                  !hasNoResearch && (
+                    <EmptyState
+                      title="No plan was produced"
+                      message="HerWay researched this case but could not build a step-by-step plan from what it found. The sources it did verify are in the Sources tab."
+                    >
+                      <button
+                        type="button"
+                        onClick={() => void retryResearch()}
+                        disabled={isRetryingResearch}
+                        className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                      >
+                        {isRetryingResearch ? 'Researching…' : 'Try research again'}
+                      </button>
+                    </EmptyState>
+                  )
                 )}
               </div>
             )}
 
-            {/* ── TAB: Evidence / Sources ──────────────────────── */}
+            {/* Evidence tab */}
             {activeTab === 'evidence' && (
               <div className="space-y-4">
                 {evidenceList.length === 0 ? (
-                  <div className="py-12 text-center space-y-3 bg-card border border-border rounded-xl p-6">
-                    <p className="text-sm text-muted-foreground">
-                      We couldn&apos;t verify enough information to make a reliable recommendation.
-                    </p>
-                    <div>
-                      <button
-                        type="button"
-                        suppressHydrationWarning
-                        onClick={() => setIsChatOpen(true)}
-                        className="px-4 py-2 text-xs font-medium text-primary hover:bg-primary/10 border border-primary/20 rounded-lg transition-colors"
-                      >
-                        Search again
-                      </button>
-                    </div>
-                  </div>
+                  <EmptyState
+                    title="No sources were verified"
+                    message="HerWay only shows information it has been able to check against a source. Nothing here was verified, so nothing is shown — rather than filling the gap with guesswork."
+                  >
+                    <button
+                      type="button"
+                      onClick={() => void retryResearch()}
+                      disabled={isRetryingResearch}
+                      className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                    >
+                      {isRetryingResearch ? 'Researching…' : 'Search again'}
+                    </button>
+                  </EmptyState>
                 ) : (
                   <>
                     <p className="text-xs text-muted-foreground">
-                      These sources were retrieved and verified by HerWay.
+                      These are the sources behind the recommendations in your plan. Open any one to
+                      check it yourself.
                     </p>
                     <div className="space-y-3">
-                      {evidenceList.map((ev: any, idx: number) => (
-                        <div
-                          key={ev.id || idx}
-                          className="border border-border rounded-xl p-4 space-y-2 hover:border-border/80 transition-colors"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="space-y-1 flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="text-sm font-medium text-foreground leading-snug">
-                                  {ev.source_title || ev.title || ev.domain}
-                                </h3>
-                                {ev.source_type && (
-                                  <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded capitalize">
-                                    {(ev.source_type || '').replace(/_/g, ' ')}
-                                  </span>
-                                )}
-                              </div>
-                              {ev.domain && (
-                                <p className="text-xs text-muted-foreground font-mono">{ev.domain}</p>
-                              )}
-                            </div>
-                            {ev.url && (
-                              <a
-                                href={ev.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-xs text-primary hover:underline shrink-0 font-medium"
-                                aria-label={`Open source: ${ev.source_title || ev.domain}`}
-                              >
-                                View source →
-                              </a>
-                            )}
-                          </div>
-                          {(ev.claim_supported || ev.claim) && (
-                            <p className="text-sm text-foreground/90 leading-relaxed bg-muted/20 p-2.5 rounded-lg border border-border/40">
-                              &ldquo;{ev.claim_supported || ev.claim}&rdquo;
-                            </p>
-                          )}
-                          {ev.why_this_source_matters && (
-                            <p className="text-xs text-muted-foreground italic">
-                              Why this matters: {ev.why_this_source_matters}
-                            </p>
-                          )}
-                        </div>
+                      {evidenceList.map((ev, idx) => (
+                        <EvidenceCard key={ev.id || idx} evidence={ev} />
                       ))}
                     </div>
                   </>
@@ -799,266 +896,209 @@ export default function CaseWorkspacePage() {
               </div>
             )}
 
-            {/* ── TAB: Resources ───────────────────────────────── */}
+            {/* Resources tab */}
             {activeTab === 'resources' && (
               <div className="space-y-4">
-                {/* Search for more */}
                 <form onSubmit={handleSearchMoreResources} className="flex gap-2">
                   <input
                     type="text"
-                    suppressHydrationWarning
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search for nearby shelters, clinics, legal aid, or police cells…"
+                    placeholder="Search for shelters, legal aid, women police stations…"
                     aria-label="Search for nearby resources"
                     className="flex-1 px-3.5 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
                   />
                   <button
                     type="submit"
-                    suppressHydrationWarning
                     disabled={isSearchingResources || !searchQuery.trim()}
                     className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-40 text-primary-foreground text-sm font-medium rounded-lg transition-colors shrink-0"
                   >
-                    {isSearchingResources ? (
-                      <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin block" aria-hidden="true" />
-                    ) : 'Search'}
+                    {isSearchingResources ? 'Searching…' : 'Search'}
                   </button>
                 </form>
 
+                {knownLocation ? (
+                  <p className="text-xs text-muted-foreground">
+                    Searching near <span className="font-medium text-foreground">{knownLocation}</span>.{' '}
+                    <button
+                      type="button"
+                      onClick={() => setShowLocationPrompt(true)}
+                      className="text-primary hover:underline"
+                    >
+                      Change
+                    </button>
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    HerWay does not know where you are and will not guess.{' '}
+                    <button
+                      type="button"
+                      onClick={() => setShowLocationPrompt(true)}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      Enter your city or district
+                    </button>{' '}
+                    to find nearby support.
+                  </p>
+                )}
+
+                {resourceError && (
+                  <InlineError message={resourceError} onDismiss={() => setResourceError(null)} />
+                )}
+                {resourceNotice && (
+                  <p className="text-xs text-muted-foreground border border-border rounded-lg px-3 py-2">
+                    {resourceNotice}
+                  </p>
+                )}
+
                 {allResources.length === 0 ? (
-                  <div className="py-12 text-center space-y-3 bg-card border border-border rounded-xl p-6">
-                    <p className="text-sm text-muted-foreground">
-                      We couldn&apos;t find a suitable nearby resource for this location.
-                    </p>
-                    <div>
-                      <button
-                        type="button"
-                        suppressHydrationWarning
-                        onClick={() => {
-                          const inputEl = document.querySelector('input[aria-label="Search for nearby resources"]') as HTMLInputElement;
-                          if (inputEl) { inputEl.focus(); }
-                        }}
-                        className="px-4 py-2 text-xs font-medium text-primary hover:bg-primary/10 border border-primary/20 rounded-lg transition-colors"
-                      >
-                        Try another area
-                      </button>
-                    </div>
-                  </div>
+                  <EmptyState
+                    title="No support services found yet"
+                    message={
+                      knownLocation
+                        ? `We did not find services near ${knownLocation}. The national helplines are always available: 112 for emergencies, 181 for the women helpline.`
+                        : 'Add your city or district above and HerWay will look for One Stop Centres, women police stations and legal aid near you.'
+                    }
+                  />
                 ) : (
                   <div className="space-y-3">
-                    {allResources.map((res: any, idx: number) => (
-                      <div
-                        key={res.id || idx}
-                        className="border border-border rounded-xl p-4 space-y-2 hover:border-border/80 transition-colors"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="text-sm font-semibold text-foreground">{res.name}</h3>
-                              {res.is_verified_gov_or_ngo ? (
-                                <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded">
-                                  ✓ Verified Resource
-                                </span>
-                              ) : (
-                                <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded">
-                                  Source needs verification
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                              {res.category && (
-                                <span className="capitalize">{res.category.replace(/_/g, ' ')}</span>
-                              )}
-                              {res.source_domain && (
-                                <>
-                                  <span aria-hidden="true">·</span>
-                                  <span className="font-mono">{res.source_domain}</span>
-                                </>
-                              )}
-                              {res.retrieved_at && (
-                                <>
-                                  <span aria-hidden="true">·</span>
-                                  <span>Retrieved {new Date(res.retrieved_at).toLocaleDateString()}</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="space-y-1 text-sm pt-1">
-                          {res.address && (
-                            <a
-                              href={`https://maps.google.com/?q=${encodeURIComponent(res.name + ' ' + res.address)}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-start gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                              aria-label={`Get directions to ${res.name}`}
-                            >
-                              <span className="mt-0.5 shrink-0" aria-hidden="true">📍</span>
-                              <span className="hover:underline">{res.address}</span>
-                            </a>
-                          )}
-                          {res.phone && (
-                            <a
-                              href={`tel:${res.phone.replace(/[^0-9+]/g, '')}`}
-                              className="flex items-center gap-1.5 text-primary font-mono font-semibold hover:underline"
-                              aria-label={`Call ${res.name} at ${res.phone}`}
-                            >
-                              <span aria-hidden="true">📞</span>
-                              {res.phone}
-                            </a>
-                          )}
-                          {res.operating_hours && (
-                            <p className="text-muted-foreground text-xs flex items-center gap-1.5">
-                              <span aria-hidden="true">🕒</span>
-                              {res.operating_hours}
-                            </p>
-                          )}
-                          {res.url && (
-                            <a
-                              href={res.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs text-primary hover:underline font-medium block pt-0.5"
-                              aria-label={`Visit ${res.name} website`}
-                            >
-                              Visit website →
-                            </a>
-                          )}
-                        </div>
-                      </div>
+                    {allResources.map((res, idx) => (
+                      <ResourceCard key={res.id || idx} resource={res} />
                     ))}
                   </div>
                 )}
               </div>
             )}
-            {/* ── TAB: Community ─────────────────────────────────── */}
-            {/* Reuses existing Haven embedding search via ChatAgent search_community tool */}
+
+            {/* Community tab */}
             {activeTab === 'community' && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div>
-                    <h2 className="text-sm font-medium text-foreground">Community Experiences</h2>
+                    <h2 className="text-sm font-medium text-foreground">Shared experiences</h2>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Similar situations shared anonymously by others in the HerWay community
+                      Situations others have shared anonymously. Contact details are never shown.
                     </p>
                   </div>
                   <Link href="/community" className="text-xs text-primary hover:underline font-medium shrink-0">
                     Browse all →
                   </Link>
                 </div>
+
                 {isLoadingCommunity ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="h-20 bg-muted/50 rounded-xl animate-pulse" />
-                    ))}
-                  </div>
+                  <LoadingState label="Finding similar experiences" rows={3} />
+                ) : communityError ? (
+                  <ErrorState
+                    message={communityError}
+                    onRetry={() => {
+                      setCommunityLoaded(false);
+                      setCommunityError(null);
+                    }}
+                  />
                 ) : communityPosts.length > 0 ? (
                   <div className="space-y-3">
-                    {communityPosts.map((post: any, idx: number) => (
-                      <div key={post._id || idx} className="border border-border rounded-xl p-4 space-y-2">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-medium text-foreground">{post.name || 'Anonymous Sister'}</span>
-                            {post.location && (
-                              <span className="text-[11px] text-muted-foreground">📍 {post.location}</span>
-                            )}
-                            {post.severity && (
-                              <span className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded capitalize">{post.severity}</span>
+                    {communityPosts.map((post, idx) => {
+                      const id = typeof post._id === 'string' ? post._id : undefined;
+                      const name = typeof post.Name === 'string' ? post.Name : 'Anonymous';
+                      const loc = typeof post.Location === 'string' ? post.Location : undefined;
+                      const info =
+                        typeof post['Other info'] === 'string' ? post['Other info'] : undefined;
+                      return (
+                        <div key={id ?? idx} className="border border-border rounded-xl p-4 space-y-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-medium text-foreground">{name}</span>
+                              {loc && <span className="text-[11px] text-muted-foreground">{loc}</span>}
+                            </div>
+                            {id && (
+                              <Link
+                                href={`/post/${id}`}
+                                className="text-xs text-primary hover:underline font-medium"
+                              >
+                                Read post →
+                              </Link>
                             )}
                           </div>
-                          {post._id && (
-                            <Link href={`/post/${post._id}`} className="text-xs text-primary hover:underline font-medium">
-                              Read post →
-                            </Link>
+                          {info && (
+                            <p className="text-xs text-foreground/80 leading-relaxed">{info}</p>
                           )}
                         </div>
-                        {post.other_info && <p className="text-xs text-foreground/80 leading-relaxed">{post.other_info}</p>}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
-                  <div className="text-center py-10 space-y-3">
-                    <p className="text-muted-foreground text-sm">No similar community posts found yet.</p>
-                    <p className="text-xs text-muted-foreground">You are not alone. Share your experience anonymously to help others.</p>
-                    <Link href="/create-post" className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors">
+                  <EmptyState
+                    title="No similar posts found"
+                    message="That does not mean no one has been through this. You can share your own experience anonymously to connect with others."
+                  >
+                    <Link
+                      href="/create-post"
+                      className="inline-flex px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
+                    >
                       Share anonymously →
                     </Link>
-                  </div>
+                  </EmptyState>
                 )}
-                <div className="border border-border/50 rounded-xl p-4 bg-muted/20 space-y-2">
-                  <p className="text-xs font-medium text-foreground">Discreet communication</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Need to send a hidden help message? HerWay can hide text inside an ordinary image using steganography.
-                  </p>
-                  <button type="button" onClick={() => setIsChatOpen(true)} className="text-xs text-primary hover:underline font-medium">
-                    Ask HerWay about discreet messaging →
-                  </button>
-                </div>
               </div>
             )}
           </div>
 
-          {/* ── Sidebar: Situation details (desktop) ─────────── */}
+          {/* Sidebar */}
           <aside className="hidden lg:block space-y-6">
-            {/* Progress summary */}
             <div className="haven-card space-y-3">
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Progress
               </h3>
-              {isSafetyMode ? (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-foreground">{completedSafetyActions} steps done</span>
-                    <span className="text-muted-foreground">{totalSafetyActions} total</span>
-                  </div>
-                  <div className="haven-progress-bar">
-                    <div
-                      className="haven-progress-fill"
-                      style={{ width: `${totalSafetyActions > 0 ? (completedSafetyActions / totalSafetyActions) * 100 : 0}%` }}
-                    />
-                  </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-foreground">
+                    {isSafetyMode ? completedSafetyActions : completedStdActions} steps done
+                  </span>
+                  <span className="text-muted-foreground">
+                    {isSafetyMode ? totalSafetyActions : totalStdActions} total
+                  </span>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-foreground">{completedStdActions} steps done</span>
-                    <span className="text-muted-foreground">{totalStdActions} total</span>
-                  </div>
-                  <div className="haven-progress-bar">
-                    <div
-                      className="haven-progress-fill"
-                      style={{ width: `${totalStdActions > 0 ? (completedStdActions / totalStdActions) * 100 : 0}%` }}
-                    />
-                  </div>
+                <div className="haven-progress-bar">
+                  <div
+                    className="haven-progress-fill"
+                    style={{
+                      width: `${
+                        isSafetyMode
+                          ? totalSafetyActions > 0
+                            ? (completedSafetyActions / totalSafetyActions) * 100
+                            : 0
+                          : totalStdActions > 0
+                          ? (completedStdActions / totalStdActions) * 100
+                          : 0
+                      }%`,
+                    }}
+                  />
                 </div>
-              )}
+              </div>
             </div>
 
-            {/* Ask HerWay CTA */}
             <div className="haven-card space-y-3">
               <h3 className="text-sm font-medium text-foreground">Ask HerWay</h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                If your situation changes, or you have questions, HerWay can update your plan.
+                If anything changes, tell HerWay and your plan can be updated.
               </p>
               <button
                 onClick={() => setIsChatOpen(true)}
                 className="w-full py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-lg transition-colors"
-                aria-label="Open HerWay assistant chat"
               >
                 Ask a question
               </button>
             </div>
 
-            {/* Research trail link */}
             {trace.length > 0 && (
               <button
                 onClick={() => setIsTrailOpen(true)}
                 className="w-full text-left haven-card hover:border-border/80 transition-colors space-y-1"
-                aria-label="See how HerWay researched this case"
               >
                 <h3 className="text-sm font-medium text-foreground">How we researched this</h3>
                 <p className="text-xs text-muted-foreground">
-                  {trace.length} search{trace.length !== 1 ? 'es' : ''} · {evidenceList.length} sources verified
+                  {trace.length} search{trace.length !== 1 ? 'es' : ''} · {evidenceList.length} source
+                  {evidenceList.length !== 1 ? 's' : ''} verified
                 </p>
                 <p className="text-xs text-primary font-medium">View research trail →</p>
               </button>
@@ -1067,104 +1107,99 @@ export default function CaseWorkspacePage() {
         </div>
       </div>
 
-      {/* ── Ask HerWay Drawer ────────────────────────────────── */}
+      {/* Ask HerWay drawer */}
       {isChatOpen && (
         <div
           className="fixed inset-y-0 right-0 w-full sm:w-[420px] bg-background border-l border-border shadow-2xl z-50 flex flex-col"
           role="dialog"
           aria-modal="true"
-          aria-label="Ask HerWay assistant"
+          aria-label="Ask HerWay"
         >
           <div className="p-4 border-b border-border flex items-center justify-between">
             <div className="space-y-0.5">
               <h3 className="text-sm font-semibold text-foreground">Ask HerWay</h3>
-              <p className="text-xs text-muted-foreground">Your plan can be updated based on new information.</p>
+              <p className="text-xs text-muted-foreground">
+                Tell HerWay what has changed and your plan can be updated.
+              </p>
             </div>
             <button
               onClick={() => setIsChatOpen(false)}
               className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              aria-label="Close assistant"
+              aria-label="Close"
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
+              ✕
             </button>
           </div>
 
           <div className="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-3">
             {chatHistory.length === 0 && (
               <div className="p-4 bg-muted/30 rounded-xl space-y-3">
-                <p className="text-xs font-semibold text-foreground">Interactive Assistant Tools:</p>
+                <p className="text-xs font-semibold text-foreground">You could ask:</p>
                 <div className="grid grid-cols-1 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleSendChat(undefined, "Generate a formal legal complaint report for authorities based on this case.")}
-                    className="text-left p-2.5 rounded-lg border border-border bg-card hover:border-primary/40 text-xs text-foreground transition-colors flex items-center justify-between group"
-                  >
-                    <span>📝 Generate formal police/authority report</span>
-                    <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSendChat(undefined, "What are my legal rights in this situation under Indian law?")}
-                    className="text-left p-2.5 rounded-lg border border-border bg-card hover:border-primary/40 text-xs text-foreground transition-colors flex items-center justify-between group"
-                  >
-                    <span>⚖️ Check legal rights & statutes (LawBot RAG)</span>
-                    <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSendChat(undefined, "Share an empowering poem to give me courage.")}
-                    className="text-left p-2.5 rounded-lg border border-border bg-card hover:border-primary/40 text-xs text-foreground transition-colors flex items-center justify-between group"
-                  >
-                    <span>💜 Words of strength & courage (Poem)</span>
-                    <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSendChat(undefined, "How can I encode a discreet hidden message inside an ordinary photo?")}
-                    className="text-left p-2.5 rounded-lg border border-border bg-card hover:border-primary/40 text-xs text-foreground transition-colors flex items-center justify-between group"
-                  >
-                    <span>🔒 Discreet steganography instructions</span>
-                    <span className="text-primary opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                  </button>
+                  {[
+                    'What should I do first?',
+                    'Why are you recommending this?',
+                    'What if that does not work?',
+                    'Find support near me.',
+                    'Is this information current?',
+                    'Help me write a complaint for the police.',
+                  ].map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => void sendChat(undefined, q)}
+                      className="text-left p-2.5 rounded-lg border border-border bg-card hover:border-primary/40 text-xs text-foreground transition-colors"
+                    >
+                      {q}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
+
             {chatHistory.map((msg, idx) => (
               <div
                 key={idx}
-                className={`max-w-[85%] px-4 py-3 rounded-xl text-sm leading-relaxed ${
+                className={`max-w-[85%] px-4 py-3 rounded-xl text-sm leading-relaxed whitespace-pre-wrap ${
                   msg.role === 'user'
                     ? 'bg-primary text-primary-foreground ml-auto'
+                    : msg.failed
+                    ? 'bg-rose-500/10 border border-rose-500/30 text-foreground mr-auto'
                     : 'bg-muted text-foreground mr-auto border border-border'
                 }`}
               >
                 {msg.content}
               </div>
             ))}
+
             {isChatLoading && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" aria-hidden="true" />
-                HerWay is thinking…
+                HerWay is working on that…
               </div>
             )}
+            <div ref={chatEndRef} />
           </div>
 
-          <form onSubmit={handleSendChat} className="p-4 border-t border-border flex gap-2">
+          {chatError && (
+            <div className="px-4 pb-2">
+              <InlineError message={chatError} onDismiss={() => setChatError(null)} />
+            </div>
+          )}
+
+          <form onSubmit={sendChat} className="p-4 border-t border-border flex gap-2">
             <input
               type="text"
               value={chatMessage}
               onChange={(e) => setChatMessage(e.target.value)}
-              placeholder="Ask a question or describe what's changed…"
-              aria-label="Message to HerWay assistant"
+              placeholder="Ask a question, or say what has changed…"
+              aria-label="Message to HerWay"
               className="flex-1 px-3.5 py-2.5 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
             />
             <button
               type="submit"
               disabled={isChatLoading || !chatMessage.trim()}
               className="px-4 py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-40 text-primary-foreground text-sm font-medium rounded-lg transition-colors shrink-0"
-              aria-label="Send message"
             >
               Send
             </button>
@@ -1172,7 +1207,7 @@ export default function CaseWorkspacePage() {
         </div>
       )}
 
-      {/* ── Plan History Modal ────────────────────────────────── */}
+      {/* Plan history */}
       {showHistoryModal && safetyPlan?.updates_history && (
         <div
           className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -1182,29 +1217,27 @@ export default function CaseWorkspacePage() {
         >
           <div className="bg-card border border-border rounded-xl max-w-lg w-full shadow-2xl flex flex-col max-h-[80vh]">
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <h3 className="text-base font-semibold text-foreground">Plan updates</h3>
+              <h3 className="text-base font-semibold text-foreground">Why your plan changed</h3>
               <button
                 onClick={() => setShowHistoryModal(false)}
                 className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                aria-label="Close update history"
+                aria-label="Close"
               >
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                  <path d="M1 1L13 13M13 1L1 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
+                ✕
               </button>
             </div>
             <div className="overflow-y-auto custom-scrollbar p-5 space-y-4">
-              {safetyPlan.updates_history.map((upd: any, idx: number) => (
+              {safetyPlan.updates_history.map((upd, idx) => (
                 <div key={upd.update_id || idx} className="space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <p className="text-sm font-medium text-foreground">{upd.why_plan_changed}</p>
                     <span className="text-xs text-muted-foreground shrink-0">
-                      {new Date(upd.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatIndianDateTime(upd.timestamp)}
                     </span>
                   </div>
-                  {upd.what_changed?.length > 0 && (
+                  {(upd.what_changed?.length ?? 0) > 0 && (
                     <ul className="space-y-1">
-                      {upd.what_changed.map((c: string, i: number) => (
+                      {upd.what_changed!.map((c, i) => (
                         <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
                           <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" aria-hidden="true" />
                           {c}
@@ -1212,15 +1245,15 @@ export default function CaseWorkspacePage() {
                       ))}
                     </ul>
                   )}
-                  {upd.new_recommended_steps?.length > 0 && (
+                  {(upd.new_recommended_steps?.length ?? 0) > 0 && (
                     <div className="pl-3 border-l-2 border-primary/30 space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">New steps added:</p>
-                      {upd.new_recommended_steps.map((s: string, i: number) => (
+                      {upd.new_recommended_steps!.map((s, i) => (
                         <p key={i} className="text-xs text-foreground">{s}</p>
                       ))}
                     </div>
                   )}
-                  {idx < safetyPlan.updates_history.length - 1 && (
+                  {idx < safetyPlan.updates_history!.length - 1 && (
                     <hr className="border-border/50 mt-3" />
                   )}
                 </div>
@@ -1230,14 +1263,21 @@ export default function CaseWorkspacePage() {
         </div>
       )}
 
-      {/* Research Trail Drawer */}
+      <LocationPrompt
+        isOpen={showLocationPrompt}
+        currentLocation={knownLocation}
+        onClose={() => setShowLocationPrompt(false)}
+        onSave={saveLocation}
+      />
+
       <ResearchTrailDrawer
         isOpen={isTrailOpen}
         onClose={() => setIsTrailOpen(false)}
-        category={caseData.category}
         trace={trace}
         evidenceCount={evidenceList.length}
-        actionCount={isSafetyMode ? totalSafetyActions : totalStdActions}
+        degradations={degradations}
+        locationUsed={caseData.research_location_used ?? knownLocation}
+        hasPlan={Boolean(safetyPlan) || (actionPlan?.actions?.length ?? 0) > 0}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { InputForm } from '@/components/InputForm';
 import Share from '@/components/Share';
 import { useClerk } from '@clerk/nextjs';
@@ -68,12 +69,12 @@ function Page() {
             >
               Continue Anonymously
             </button>
-            <a
+            <Link
               href="/sign-in"
               className="block w-full py-2.5 border border-border text-foreground text-sm font-medium rounded-xl hover:bg-muted transition-colors text-center"
             >
-              Sign In with Account
-            </a>
+              Sign in with an account
+            </Link>
           </div>
         </div>
       </div>

@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from backend.models.action_plan import ActionPriority, ActionStatus
+from backend.models.research import ResourceVerification
 
 
 class SafetyPlanPhase(str, Enum):
@@ -69,19 +70,46 @@ class SafetyAssessment(BaseModel):
 
 
 class SafetyMatchedResource(BaseModel):
-    """A real-world verified resource discovered via SerpApi (Web/Local/Maps)."""
+    """A real-world resource offered to the user, with explicit provenance.
+
+    ``verification`` must reflect what we actually checked.  The field used to
+    be a boolean defaulting to ``True``, which meant every unchecked Google
+    Maps listing was presented to a woman in crisis as a "verified" government
+    service.
+    """
     id: str = Field(..., description="Unique resource ID, e.g. RES_01")
     name: str = Field(..., description="Name of shelter, helpline, police cell, or support org")
-    category: str = Field(..., description="helpline | shelter | police | legal_aid | crisis_center | cyber_cell | posh_icc")
+    category: str = Field(
+        ...,
+        description=(
+            "helpline | portal | shelter | police | legal_aid | crisis_center | "
+            "cyber_cell | one_stop_centre | posh_icc"
+        ),
+    )
     phone: Optional[str] = Field(None, description="Direct contact phone number")
     address: Optional[str] = Field(None, description="Physical street address if relevant")
     url: Optional[str] = Field(None, description="Official portal or verification URL")
-    operating_hours: Optional[str] = Field(None, description="e.g., '24/7' or 'Mon-Fri 9am-5pm'")
+    operating_hours: Optional[str] = Field(None, description="e.g., '24x7' or 'Mon-Fri 10am-5pm'")
     rating: Optional[float] = Field(None, description="Google Maps / Local user rating")
-    is_verified_gov_or_ngo: bool = Field(True, description="True if verified official portal or registered organization")
+    verification: ResourceVerification = Field(
+        ResourceVerification.UNVERIFIED_LISTING,
+        description="official_source | likely_official | unverified_listing",
+    )
+    verification_note: str = Field(
+        "",
+        description="Plain-English explanation of the verification level, shown to the user",
+    )
     notes: Optional[str] = Field(None, description="Special instructions, e.g. 'Accepts mothers with children'")
     source_domain: Optional[str] = Field(None, description="Extracted domain of source URL")
     retrieved_at: datetime = Field(default_factory=datetime.utcnow, description="Timestamp when resource was retrieved")
+
+    @property
+    def is_verified_gov_or_ngo(self) -> bool:
+        """Backward-compatible flag for callers written against the old field."""
+        return self.verification in (
+            ResourceVerification.OFFICIAL_SOURCE,
+            ResourceVerification.LIKELY_OFFICIAL,
+        )
 
 
 class SafetyActionItem(BaseModel):
@@ -150,9 +178,9 @@ class SafetyPlan(BaseModel):
     
     disclaimer: str = Field(
         default=(
-            "HerWay Safety Plan is an information and crisis navigation tool. "
-            "If you are in immediate physical danger, please contact your local emergency services (112 / 1091 / 911) "
-            "or move to a safe, public location immediately."
+            "This safety plan is information and crisis navigation, not legal or "
+            "medical advice. If you are in immediate danger, call 112 (emergency) "
+            "or 181 (women helpline), or move to a safe public place."
         )
     )
     

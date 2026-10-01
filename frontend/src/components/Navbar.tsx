@@ -35,10 +35,7 @@ function Navbar() {
     { href: '/lawbot', label: 'LawBot' },
     { href: '/therapybot', label: 'Talk to Niva' },
     { href: '/community', label: 'Community' },
-    { href: '/create-post', label: 'Discreet Message' },
-    ...(mounted && user && (user.unsafeMetadata as { isAdmin?: boolean })?.isAdmin
-      ? [{ href: '/dashboard', label: 'Dashboard' }]
-      : []),
+    { href: '/discreet-message', label: 'Discreet message' },
   ];
 
   return (

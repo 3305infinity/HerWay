@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
 import Image from 'next/image';
+
+import { apiPost } from '@/lib/api';
+import { ALL_INDIAN_REGIONS, composeLocation } from '@/lib/india';
+import type { CaseRecord, Situation } from '@/lib/types';
 
 const CATEGORIES = [
   { id: 'domestic_violence', label: 'Domestic abuse & violence', group: 'safety', starter: 'I am experiencing abuse or threats at home and need support resources and legal options.' },
@@ -18,32 +21,31 @@ const CATEGORIES = [
   { id: 'other', label: 'Something else', group: 'general', starter: '' },
 ];
 
-const RESEARCH_STEPS = [
-  'Understanding your situation',
-  'Finding verified resources and helplines',
-  'Checking legal acts and government portals',
-  'Locating nearby support centres',
-  'Building your personalised plan',
-];
-
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-
 export default function Home() {
   const router = useRouter();
-  const { user } = useUser();
   const inputSectionRef = useRef<HTMLDivElement>(null);
 
   const [situationText, setSituationText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('domestic_violence');
-  const [locationInput, setLocationInput] = useState('');
+  const [city, setCity] = useState('');
+  const [stateRegion, setStateRegion] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState<'input' | 'understanding' | 'researching'>('input');
-  const [analysis, setAnalysis] = useState<any>(null);
+  const [analysis, setAnalysis] = useState<Situation | null>(null);
+  const [analysisFailed, setAnalysisFailed] = useState(false);
   const [caseId, setCaseId] = useState<string | null>(null);
-  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [researchError, setResearchError] = useState<boolean>(false);
+  const [researchError, setResearchError] = useState<string | null>(null);
+
+  // Pre-fill the box when arriving from a link that carries a starter.
+  useEffect(() => {
+    const starter = new URLSearchParams(window.location.search).get('starter');
+    if (starter) {
+      setSituationText(starter);
+      inputSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, []);
 
   const scrollToInput = (catId?: string, starter?: string) => {
     if (catId) setSelectedCategory(catId);
@@ -51,8 +53,7 @@ export default function Home() {
       setSituationText(starter);
     }
     inputSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
-    const textarea = document.getElementById('situation-textarea');
-    if (textarea) textarea.focus();
+    document.getElementById('situation-textarea')?.focus();
   };
 
   const handleQuickExit = () => {
@@ -61,88 +62,65 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!situationText.trim() || situationText.trim().length < 10) return;
+    if (situationText.trim().length < 10) return;
 
     setIsSubmitting(true);
     setErrorMessage(null);
+    setAnalysisFailed(false);
+
+    const location = composeLocation({ city, state: stateRegion });
+
+    // Identity comes from the session on the server; the browser does not
+    // get to say who owns this case.
+    const created = await apiPost<CaseRecord>('/api/v2/cases', {
+      situation_text: situationText,
+      category: selectedCategory,
+      location: location ? { display_name: location } : null,
+    });
+
+    if (!created.ok) {
+      setErrorMessage(
+        `${created.error.message} Your words are still here below — nothing has been lost.`,
+      );
+      setIsSubmitting(false);
+      return;
+    }
+
+    setCaseId(created.data.id);
     setStep('understanding');
 
-    try {
-      const createRes = await fetch(`${API_BASE}/api/v2/cases`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: user?.id || 'anonymous',
-          situation_text: situationText,
-          category: selectedCategory,
-          location: locationInput ? { display_name: locationInput } : null,
-        }),
+    const analysed = await apiPost<Situation>('/api/v2/cases/analyze', {
+      situation_text: situationText,
+      category: selectedCategory,
+    });
+
+    if (analysed.ok) {
+      setAnalysis(analysed.data);
+    } else {
+      // Show the user's own words back rather than fabricating a summary.
+      setAnalysisFailed(true);
+      setAnalysis({
+        case_summary: situationText,
+        category: selectedCategory,
+        known_facts: [],
       });
-
-      if (!createRes.ok) throw new Error('Could not create case');
-      const newCase = await createRes.json();
-      const newId = newCase.id || newCase._id;
-      setCaseId(newId);
-
-      try {
-        const analyzeRes = await fetch(`${API_BASE}/api/v2/cases/analyze`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ situation_text: situationText }),
-        });
-        if (analyzeRes.ok) {
-          setAnalysis(await analyzeRes.json());
-        } else {
-          setAnalysis({
-            case_summary: situationText,
-            known_facts: [situationText.slice(0, 120)],
-            missing_information: [],
-            questions_to_ask: [],
-          });
-        }
-      } catch {
-        setAnalysis({
-          case_summary: situationText,
-          known_facts: [situationText.slice(0, 120)],
-          missing_information: [],
-          questions_to_ask: [],
-        });
-      }
-    } catch (err: any) {
-      console.error('Case creation error:', err);
-      setErrorMessage("We couldn't connect to HerWay right now. Your text is preserved below. Please try again.");
-      setStep('input');
-    } finally {
-      setIsSubmitting(false);
     }
+    setIsSubmitting(false);
   };
 
   const startResearch = async () => {
     if (!caseId) return;
     setStep('researching');
-    setResearchError(false);
-    setCurrentStepIndex(0);
+    setResearchError(null);
 
-    let stepIdx = 0;
-    const interval = setInterval(() => {
-      stepIdx++;
-      if (stepIdx < RESEARCH_STEPS.length - 1) {
-        setCurrentStepIndex(stepIdx);
-      }
-    }, 2800);
+    // Research can legitimately take a while; allow for it rather than
+    // timing out and telling the user it failed when it did not.
+    const result = await apiPost(`/api/v2/research/${caseId}/run`, undefined, 180_000);
 
-    try {
-      const res = await fetch(`${API_BASE}/api/v2/research/${caseId}/run`, { method: 'POST' });
-      clearInterval(interval);
-      if (res.ok) {
-        setCurrentStepIndex(RESEARCH_STEPS.length - 1);
-        setTimeout(() => router.push(`/cases/${caseId}`), 400);
-      } else {
-        setResearchError(true);
-      }
-    } catch {
-      clearInterval(interval);
-      setResearchError(true);
+    if (result.ok) {
+      router.push(`/cases/${caseId}`);
+    } else {
+      setResearchError(result.error.message);
     }
   };
 
@@ -165,22 +143,47 @@ export default function Home() {
             </p>
           </div>
 
+          {analysisFailed && (
+            <div className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/5 text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+              We could not analyse this automatically just now, so your own words are shown
+              below unchanged. You can still continue — research will run on what you wrote.
+            </div>
+          )}
+
           <div className="space-y-4 text-sm leading-relaxed">
             <div className="p-4 rounded-xl bg-muted/40 border border-border/60 space-y-1.5">
-              <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Summary</span>
+              <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
+                {analysisFailed ? 'What you told us' : 'Summary'}
+              </span>
               <p className="text-foreground">{analysis.case_summary || situationText}</p>
             </div>
 
-            {analysis.known_facts && analysis.known_facts.length > 0 && (
+            {(analysis.known_facts?.length ?? 0) > 0 && (
               <div className="space-y-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Established Facts
+                  What we understood as fact
                 </span>
                 <ul className="space-y-1.5 pl-4 list-disc text-muted-foreground">
-                  {analysis.known_facts.map((fact: string, idx: number) => (
+                  {analysis.known_facts!.map((fact, idx) => (
                     <li key={idx} className="text-foreground/90">{fact}</li>
                   ))}
                 </ul>
+              </div>
+            )}
+
+            {(analysis.questions_to_ask?.length ?? 0) > 0 && (
+              <div className="space-y-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Things that would help us help you
+                </span>
+                <ul className="space-y-1.5 pl-4 list-disc text-muted-foreground">
+                  {analysis.questions_to_ask!.map((q, idx) => (
+                    <li key={idx}>{q}</li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                  You can add these later — you do not have to answer anything now.
+                </p>
               </div>
             )}
           </div>
@@ -217,71 +220,59 @@ export default function Home() {
             <>
               <div className="space-y-2 text-center">
                 <span className="text-xs uppercase tracking-wider font-semibold text-primary">
-                  Step 2 of 2 · Live Research & Verification
+                  Step 2 of 2 · Live research and verification
                 </span>
                 <h1 className="font-serif text-2xl sm:text-3xl text-foreground font-normal">
-                  HerWay is researching your case.
+                  HerWay is researching your situation.
                 </h1>
-                <p className="text-sm text-muted-foreground">
-                  Checking official statutes, crisis helplines, and nearby centres.
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Checking official government sources, helplines and — if you gave a
+                  location — centres near you.
                 </p>
               </div>
 
-              <div className="space-y-4 py-2">
-                {RESEARCH_STEPS.map((stepText, idx) => {
-                  const isDone = idx < currentStepIndex;
-                  const isCurrent = idx === currentStepIndex;
-                  return (
-                    <div key={idx} className="flex items-center gap-3 text-sm">
-                      <div
-                        className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 transition-all ${
-                          isDone
-                            ? 'bg-emerald-500 text-white'
-                            : isCurrent
-                            ? 'bg-primary text-primary-foreground animate-pulse'
-                            : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {isDone ? '✓' : idx + 1}
-                      </div>
-                      <span
-                        className={`transition-colors ${
-                          isDone
-                            ? 'text-muted-foreground line-through'
-                            : isCurrent
-                            ? 'text-foreground font-medium'
-                            : 'text-muted-foreground/60'
-                        }`}
-                      >
-                        {stepText}
-                      </span>
-                    </div>
-                  );
-                })}
+              {/* An indeterminate indicator. We deliberately do not animate
+                  through named steps: we cannot see the backend's progress, and
+                  ticking stages off on a timer would be showing the user
+                  research that may not have happened. */}
+              <div className="py-4 space-y-4">
+                <div
+                  className="h-1.5 w-full rounded-full bg-muted overflow-hidden"
+                  role="progressbar"
+                  aria-label="Researching"
+                >
+                  <div className="h-full w-1/3 rounded-full bg-primary animate-[herway-indeterminate_1.4s_ease-in-out_infinite]" />
+                </div>
+                <p className="text-sm text-center text-foreground">
+                  This usually takes under a minute.
+                </p>
               </div>
 
-              <p className="text-xs text-center text-muted-foreground border-t border-border/60 pt-4">
-                This takes approximately 10 to 15 seconds. Please do not close your browser.
+              <p className="text-xs text-center text-muted-foreground border-t border-border/60 pt-4 leading-relaxed">
+                You can leave this page — your case is already saved and will be waiting in
+                <strong className="text-foreground"> My cases</strong>.
               </p>
             </>
           ) : (
             <div className="space-y-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto text-xl">
-                ⚠
+              <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto text-xl" aria-hidden="true">
+                !
               </div>
               <div className="space-y-2">
-                <h1 className="text-xl font-semibold text-foreground">Live research paused</h1>
+                <h1 className="text-xl font-semibold text-foreground">Research did not finish</h1>
+                <p className="text-sm text-muted-foreground leading-relaxed">{researchError}</p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  We couldn&apos;t complete live web research right now. Your situation and case memory are completely safe.
+                  Your case has been saved. You can open it now and try research again from
+                  there whenever you want.
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button
                   type="button"
-                  onClick={startResearch}
+                  onClick={() => void startResearch()}
                   className="px-5 py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:bg-primary/90 transition-colors"
                 >
-                  Try research again
+                  Try again
                 </button>
                 {caseId && (
                   <button
@@ -289,10 +280,14 @@ export default function Home() {
                     onClick={() => router.push(`/cases/${caseId}`)}
                     className="px-5 py-2.5 border border-border text-foreground text-sm font-medium rounded-xl hover:bg-muted transition-colors"
                   >
-                    Open case workspace
+                    Open my case
                   </button>
                 )}
               </div>
+              <p className="text-xs text-muted-foreground border-t border-border/60 pt-4">
+                If you need help right now: <a href="tel:112" className="text-primary font-semibold hover:underline">112</a> for emergencies,{' '}
+                <a href="tel:181" className="text-primary font-semibold hover:underline">181</a> for the women helpline.
+              </p>
             </div>
           )}
         </div>
@@ -378,16 +373,16 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Quick Safety Trust Notes */}
+            {/* What HerWay actually does — claims we can stand behind */}
             <div className="pt-2 flex items-center gap-6 text-xs text-muted-foreground flex-wrap">
               <span className="flex items-center gap-1.5">
-                <span className="text-emerald-500 font-bold">✓</span> Confidential &amp; private
+                <span className="text-emerald-500 font-bold">✓</span> Private — never posted publicly
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="text-emerald-500 font-bold">✓</span> Official government &amp; NGO registries
+                <span className="text-emerald-500 font-bold">✓</span> Official Indian government sources first
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="text-emerald-500 font-bold">✓</span> No unverified advice
+                <span className="text-emerald-500 font-bold">✓</span> Every claim shows its source
               </span>
             </div>
           </div>
@@ -532,25 +527,53 @@ export default function Home() {
               />
             </div>
 
-            {/* Location input */}
+            {/* Location — optional, never assumed */}
             <div className="space-y-1.5">
-              <label htmlFor="location-input" className="text-xs font-medium text-muted-foreground">
-                Location (optional — helps discover nearby emergency shelters, crisis desks, and One Stop Centres)
-              </label>
-              <input
-                id="location-input"
-                type="text"
-                value={locationInput}
-                onChange={(e) => setLocationInput(e.target.value)}
-                placeholder="e.g. Austin, TX or New Delhi or Manchester"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-input bg-card text-foreground text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
-              />
+              <span className="text-xs font-medium text-muted-foreground">
+                Where are you? (optional — helps us find One Stop Centres, women police
+                stations and legal aid near you)
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input
+                  id="location-city"
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="City or district"
+                  aria-label="City or district"
+                  autoComplete="address-level2"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-input bg-card text-foreground text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
+                />
+                <select
+                  id="location-state"
+                  value={stateRegion}
+                  onChange={(e) => setStateRegion(e.target.value)}
+                  aria-label="State or Union Territory"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-input bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors cursor-pointer"
+                >
+                  <option value="">State or Union Territory</option>
+                  {ALL_INDIAN_REGIONS.map((region) => (
+                    <option key={region} value={region}>
+                      {region}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                If you leave this blank, HerWay will show national resources and will not
+                guess where you are.
+              </p>
             </div>
 
-            {/* Actions & Privacy Guarantee */}
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-xs text-muted-foreground text-center sm:text-left leading-relaxed">
-                🔒 <strong>Privacy:</strong> We don&apos;t log personal identifiers or share your situation.
+            {/* Actions and an accurate privacy note */}
+            <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <p className="text-xs text-muted-foreground text-left leading-relaxed max-w-sm">
+                <strong className="text-foreground">Privacy:</strong> what you write is saved to
+                your case so you can come back to it, and is never shared or posted publicly.
+                Searches are sent without your name or contact details.{' '}
+                <Link href="/privacy" className="text-primary hover:underline">
+                  What this does and does not protect
+                </Link>
               </p>
 
               <button
@@ -558,7 +581,7 @@ export default function Home() {
                 disabled={isSubmitting || situationText.trim().length < 10}
                 className="w-full sm:w-auto px-8 py-3.5 bg-primary hover:bg-primary/90 disabled:opacity-40 text-primary-foreground font-medium text-sm rounded-xl transition-all shadow-sm whitespace-nowrap"
               >
-                {isSubmitting ? 'Understanding what happened…' : 'Continue to situation analysis →'}
+                {isSubmitting ? 'Saving your case…' : 'Continue →'}
               </button>
             </div>
           </form>
@@ -602,10 +625,11 @@ export default function Home() {
 
             <div className="space-y-3 border-t border-border/80 pt-4">
               <span className="font-mono text-xs font-semibold text-primary">03</span>
-              <h3 className="font-serif text-lg text-foreground font-normal">Every source verified</h3>
+              <h3 className="font-serif text-lg text-foreground font-normal">You can see every source</h3>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                We do not hallucinate phone numbers or opening hours. Every contact is checked against
-                official government and NGO registries.
+                Each recommendation links to where it came from, and each resource is
+                labelled by how far we could check it — official government page, likely
+                official, or an unverified listing you should confirm first.
               </p>
             </div>
 
@@ -737,7 +761,7 @@ export default function Home() {
             </Link>
 
             <Link
-              href="/create-post"
+              href="/discreet-message"
               className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 transition-colors space-y-2 group"
             >
               <span className="text-xs text-muted-foreground">Need discreet help?</span>
@@ -795,8 +819,8 @@ export default function Home() {
             <Link href="/community" className="hover:text-foreground transition-colors">
               Community
             </Link>
-            <Link href="/create-post" className="hover:text-foreground transition-colors">
-              Discreet Message
+            <Link href="/discreet-message" className="hover:text-foreground transition-colors">
+              Discreet message
             </Link>
             <button
               type="button"

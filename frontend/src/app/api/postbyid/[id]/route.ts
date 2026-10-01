@@ -1,30 +1,40 @@
 import { NextResponse } from 'next/server';
 
+const BACKEND_URL = (
+  process.env.BACKEND_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  'http://localhost:8000'
+).replace(/\/$/, '');
+
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
   try {
-    // Replace with your backend server URL
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL}/get-post/${id}`
-    );
+    const response = await fetch(`${BACKEND_URL}/get-post/${encodeURIComponent(id)}`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20_000),
+    });
 
     if (!response.ok) {
-      return NextResponse.json(
-        { error: 'Failed to fetch post' },
-        { status: response.status }
-      );
+      let detail = 'That post could not be loaded.';
+      try {
+        const body = await response.json();
+        if (typeof body?.detail === 'string') detail = body.detail;
+      } catch {
+        // Non-JSON error body.
+      }
+      return NextResponse.json({ error: detail }, { status: response.status });
     }
 
-    const post = await response.json();
-    return NextResponse.json(post);
-  } catch {
+    return NextResponse.json(await response.json());
+  } catch (error) {
+    console.error('Failed to fetch community post:', error);
     return NextResponse.json(
-      { error: 'An error occurred while fetching the post' },
-      { status: 500 }
+      { error: 'We could not reach HerWay. Please check your connection and try again.' },
+      { status: 502 },
     );
   }
 }

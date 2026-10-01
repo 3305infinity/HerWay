@@ -17,12 +17,21 @@ Key Capabilities:
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from pydantic import BaseModel
+
+from backend.india_resources import helplines_for_category, portals_for_category
 from backend.models.action_plan import ActionPriority, ActionStatus
-from backend.models.research import EvidenceItem, LocalResource, Situation
+from backend.models.research import (
+    EvidenceItem,
+    LocalResource,
+    ResourceVerification,
+    Situation,
+)
 from backend.models.safety_plan import (
     SafetyActionItem,
     SafetyAssessment,
@@ -52,6 +61,45 @@ WOMEN_SAFETY_CATEGORIES = {
     "safety",
 }
 
+#: Signals in free text that a case needs the safety pathway even when its
+#: category says otherwise. Word-boundary anchored to avoid false positives.
+_SAFETY_SIGNAL_PATTERNS = [
+    r"abus(e|ed|ive|ing)",
+    r"assault(ed|ing)?",
+    r"threat(s|en|ened|ening)?",
+    r"stalk(s|ed|ing|er)?",
+    r"harass(ed|ing|ment)?",
+    r"violen(ce|t)",
+    r"domestic",
+    r"unsafe",
+    r"sexual",
+    r"molest(ed|ing|ation)?",
+    r"grope(d|s)?",
+    r"inappropriate (touch|comments?|messages?|behaviour|behavior)",
+    r"blackmail(ed|ing)?",
+    r"non-?consensual",
+    r"dowry",
+    r"posh act",
+    r"\bposh\b",
+    r"internal committee",
+    r"\bicc\b",
+    r"intimidat(e|ed|ing|ion)",
+    r"(hit|beat|hurt|choke[d]?|slapp?ed) me",
+    r"(scared|afraid|frightened|terrified) of",
+    r"(following|follows) me",
+    r"won'?t leave me alone",
+    r"took my (phone|money|documents|passport)",
+    r"obscene",
+    r"revenge porn",
+    r"morphed (photo|image|picture)",
+    r"protection order",
+    r"restraining order",
+]
+
+_SAFETY_SIGNAL_RE = re.compile(
+    r"\b(?:" + "|".join(_SAFETY_SIGNAL_PATTERNS) + r")", re.IGNORECASE
+)
+
 _SAFETY_ASSESSMENT_PROMPT = """\
 You are HerWay's Safety Assessment Agent, specialized in trauma-informed women's safety analysis.
 
@@ -70,27 +118,53 @@ Respond with valid JSON matching the SafetyAssessment schema.
 """
 
 _SAFETY_PLAN_SYNTHESIS_PROMPT = """\
-You are HerWay's Safety Planning Agent.
+You are HerWay's Safety Planning Agent, working in the Indian context.
 
-Synthesize the Situation, Safety Assessment, verified evidence, and discovered local resources into a structured, highly actionable Personalized Safety Plan.
+Synthesize the Situation, Safety Assessment, verified evidence, and discovered
+local resources into a structured, highly actionable Personalized Safety Plan.
+
+THE PLAN MUST FIT THIS PERSON. A generic plan is a failed plan.
+- Reflect the specific indicators that were marked true. If there are no
+  dependents, do not write steps about children. If the user already has a safe
+  place, do not tell them to find one.
+- If an indicator is false or unknown, do not assume it.
 
 STRICT STRUCTURE RULES:
-1. RIGHT_NOW (Safety Right Now - immediate 0-2 hours):
-   - Immediate safety precautions, emergency contacts (112, 1091, 181, 911), moving to safe location if needed.
-2. NEXT_24_HOURS (Next 24 Hours):
-   - Practical safe steps, contacting verified support organizations, reviewing safe options.
-3. DOCUMENT_SAFE (Document / Preserve — ONLY IF SAFE):
-   - Preserving screenshots, timestamps, or records WITHOUT endangering oneself. Never do if devices are monitored.
+1. RIGHT_NOW (immediate, 0-2 hours):
+   - Immediate safety precautions; Indian emergency numbers only: 112 (all
+     emergencies), 181 (women helpline), 1091 (women police), 1098 (children),
+     1930 (cyber crime). NEVER mention 911 or non-Indian numbers.
+2. NEXT_24_HOURS:
+   - Practical safe steps, contacting a One Stop Centre (Sakhi) or support
+     organisation, reviewing safe options.
+3. DOCUMENT_SAFE (ONLY IF SAFE):
+   - Preserving screenshots, timestamps or records WITHOUT increasing risk.
+   - Every item here MUST carry a safety_caveat. If devices may be monitored,
+     say so explicitly and suggest using a device the other person cannot access.
 4. SUPPORT_NETWORK:
-   - Trusted person outreach, professional counseling, nearby verified shelters/centers discovered through search.
+   - Trusted person outreach, counselling (Tele-MANAS 14416), nearby centres
+     that were actually discovered — never invent a centre.
 5. FORMAL_OPTIONS (Formal & Legal Pathways):
-   - Police complaint, One Stop Centre (Sakhi), POSH Internal Committee, legal aid, protection orders.
+   - Indian mechanisms only: FIR / zero FIR at a police station, complaint under
+     the Protection of Women from Domestic Violence Act 2005 (including
+     Protection Officer and protection/residence orders), POSH Act 2013 Internal
+     Committee or Local Committee, SHe-Box, cybercrime.gov.in, free legal aid
+     through DLSA/NALSA, National Commission for Women.
+   - Describe these as OPTIONS the user may choose, not as instructions.
 6. ONGOING (Ongoing & Follow-Up):
-   - Ongoing safety monitoring, future check-in steps, unresolved questions.
+   - Safety monitoring, check-in steps, unresolved questions.
 
-7. EVIDENCE & RESOURCE LINKING:
-   - Link action items to relevant evidence_ids and resource_ids.
-   - Do NOT invent arbitrary deadlines.
+ABSOLUTE SAFETY MANDATES:
+- NEVER suggest confronting, warning, reasoning with, or recording the person
+  causing harm in their presence.
+- NEVER tell the user to collect evidence if doing so would put them at risk.
+- NEVER state a legal outcome as guaranteed.
+- NEVER invent a phone number, address, office name, or deadline. Use only the
+  resources supplied in the prompt.
+
+EVIDENCE & RESOURCE LINKING:
+- Link action items to the evidence_ids and resource_ids given to you.
+- Do NOT invent arbitrary deadlines.
 
 Respond with valid JSON.
 """
@@ -104,19 +178,27 @@ class SafetyPlanAgent:
 
     @staticmethod
     def is_safety_case(category: str, situation_text: str = "") -> bool:
-        """Determines if a case qualifies for a specialized Women Safety Plan."""
+        """Determine whether a case qualifies for a specialised safety plan.
+
+        The category is checked first. When it is ambiguous (a user may describe
+        workplace sexual harassment but have the case filed as "employment"),
+        the narrative is scanned for safety signals.
+
+        Matching is word-boundary based. The previous substring match meant
+        short tokens produced false positives — "icc" fired on "hiccups" — while
+        the phrasing in the most common disclosure we see, "my manager keeps
+        making *sexual* comments", matched nothing at all and so never reached
+        the safety pathway.
+        """
         cat_lower = (category or "").lower().strip()
         if cat_lower in WOMEN_SAFETY_CATEGORIES:
             return True
-        
-        # Check for safety keywords in text if category was ambiguous
-        safety_keywords = [
-            "abuse", "abusive", "assault", "threat", "threaten", "stalk", "stalking",
-            "harass", "harassment", "violence", "domestic", "unsafe", "partner hit",
-            "scared of", "blackmail", "non-consensual", "posh", "icc"
-        ]
-        text_lower = situation_text.lower()
-        return any(kw in text_lower for kw in safety_keywords)
+
+        text_lower = (situation_text or "").lower()
+        if not text_lower:
+            return False
+
+        return bool(_SAFETY_SIGNAL_RE.search(text_lower))
 
     async def assess_safety(
         self,
@@ -151,79 +233,83 @@ class SafetyPlanAgent:
         local_resources: List[LocalResource],
         evidence: List[EvidenceItem],
     ) -> List[SafetyMatchedResource]:
-        """Maps discovered SerpApi local/maps/web results into structured SafetyMatchedResources."""
+        """Assemble the resource list for a safety plan.
+
+        Two sources, with very different trust levels:
+
+        1. Nationally-allocated helplines and official portals from
+           ``backend.india_resources`` — each carries the government page it
+           comes from, so we can state them without a live lookup.
+        2. Listings discovered via SerpApi Maps — these are third-party
+           listings and are labelled ``unverified_listing`` unless their
+           website sits on an official government domain.  The previous code
+           marked *every* discovered listing as verified, which told users that
+           an unchecked map pin was a confirmed government shelter.
+        """
         matched: List[SafetyMatchedResource] = []
         seen_names: set[str] = set()
         now = datetime.utcnow()
 
-        # 1. Standard National / Emergency Helplines based on Category
-        if category in ("domestic_violence", "safety", "threats", "unsafe_relationship", "coercive_control"):
+        # 1. National helplines — stable short codes with an official source.
+        for helpline in helplines_for_category(category):
             matched.append(
                 SafetyMatchedResource(
-                    id="RES_EMERGENCY_01",
-                    name="National Emergency Services",
-                    category="helpline",
-                    phone="112",
-                    operating_hours="24/7",
-                    source_domain="emergency.gov",
+                    id=helpline.id,
+                    name=helpline.name,
+                    category=helpline.resource_category,
+                    phone=helpline.number,
+                    url=helpline.official_source_url,
+                    operating_hours=helpline.operating_hours,
+                    source_domain=urlparse(helpline.official_source_url).netloc,
                     retrieved_at=now,
-                    is_verified_gov_or_ngo=True,
-                    notes="Immediate police, ambulance, and emergency dispatch.",
+                    verification=ResourceVerification.OFFICIAL_SOURCE,
+                    verification_note=(
+                        f"Nationally allocated number documented at {helpline.official_source_url}"
+                    ),
+                    notes=helpline.notes or helpline.purpose,
                 )
             )
+            seen_names.add(helpline.name)
+
+        # 2. Official complaint / filing portals for this category.
+        for portal in portals_for_category(category):
+            if portal.name in seen_names:
+                continue
+            seen_names.add(portal.name)
             matched.append(
                 SafetyMatchedResource(
-                    id="RES_WOMEN_HELPLINE_01",
-                    name="National Women Helpline / NCW",
-                    category="helpline",
-                    phone="181 / 1091",
-                    operating_hours="24/7",
-                    source_domain="ncw.nic.in",
+                    id=portal.id,
+                    name=portal.name,
+                    category=portal.resource_category,
+                    url=portal.url,
+                    source_domain=urlparse(portal.url).netloc,
                     retrieved_at=now,
-                    is_verified_gov_or_ngo=True,
-                    notes="Toll-free 24/7 confidential women in distress support.",
-                )
-            )
-        elif category in ("stalking", "online_harassment", "cyber"):
-            matched.append(
-                SafetyMatchedResource(
-                    id="RES_CYBER_01",
-                    name="National Cyber Crime Reporting Portal",
-                    category="cyber_cell",
-                    phone="1930",
-                    url="https://cybercrime.gov.in",
-                    source_domain="cybercrime.gov.in",
-                    operating_hours="24/7",
-                    retrieved_at=now,
-                    is_verified_gov_or_ngo=True,
-                    notes="Official portal for reporting cyber harassment, stalking, and non-consensual content.",
-                )
-            )
-        elif category in ("workplace_harassment",):
-            matched.append(
-                SafetyMatchedResource(
-                    id="RES_POSH_01",
-                    name="SHe-Box / Ministry of Women & Child Development",
-                    category="posh_icc",
-                    url="https://shebox.nic.in",
-                    source_domain="shebox.nic.in",
-                    retrieved_at=now,
-                    is_verified_gov_or_ngo=True,
-                    notes="Online complaint management system for workplace sexual harassment.",
+                    verification=ResourceVerification.OFFICIAL_SOURCE,
+                    verification_note=f"Official Government of India portal ({portal.url})",
+                    notes=portal.purpose,
                 )
             )
 
-        # 2. Add Discovered Local Resources from SerpApi Maps / Local Search
+        # 3. Locally discovered listings — carried through with their own,
+        #    honest, provenance label.
         for idx, res in enumerate(local_resources):
             if res.name in seen_names:
                 continue
             seen_names.add(res.name)
-            
-            res_type = "shelter" if "shelter" in res.name.lower() or "hostel" in res.name.lower() else "crisis_center"
-            if "police" in res.name.lower() or "thana" in res.name.lower():
+
+            name_lower = res.name.lower()
+            if "police" in name_lower or "thana" in name_lower:
                 res_type = "police"
-            elif "legal" in res.name.lower() or "court" in res.name.lower() or "aid" in res.name.lower():
+            elif any(k in name_lower for k in ("legal", "court", "dlsa", "legal services")):
                 res_type = "legal_aid"
+            elif any(k in name_lower for k in ("shelter", "hostel", "swadhar", "ujjwala", "niwas")):
+                res_type = "shelter"
+            elif "cyber" in name_lower:
+                res_type = "cyber_cell"
+            elif "one stop" in name_lower or "sakhi" in name_lower:
+                res_type = "one_stop_centre"
+            else:
+                res_type = "crisis_center"
 
             matched.append(
                 SafetyMatchedResource(
@@ -237,8 +323,9 @@ class SafetyPlanAgent:
                     operating_hours=res.hours,
                     source_domain=res.source_domain,
                     retrieved_at=res.retrieved_at or now,
-                    is_verified_gov_or_ngo=res.is_verified_gov_or_ngo,
-                    notes=f"Discovered via SerpApi Local Search ({res.rating or 'N/A'} stars)",
+                    verification=res.verification,
+                    verification_note=res.verification_note,
+                    notes=res.relevance_reason or None,
                 )
             )
 

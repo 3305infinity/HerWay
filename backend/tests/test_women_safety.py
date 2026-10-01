@@ -1,427 +1,292 @@
 """
-Comprehensive tests for Haven Women's Safety & Generic Case Capabilities.
+Women's-safety behaviour tests.
 
-Tests cover:
-1. Domestic violence case (Safety-first ordering, helpline tasks, no confrontation)
-2. Stalking case (Police/cyber cell research, safety measures)
-3. Online harassment case (Cybercrime reporting, evidence preservation)
-4. Workplace harassment case (POSH act, ICC reporting options)
-5. Non-women consumer case (Standard routing, no women-specific triggers)
-6. Legacy endpoints preservation check (FastAPI test client)
-7. SerpApi research integration check
-8. Evidence linked to action plan recommendations
+These cover the judgement calls that matter most for this product:
+
+1. Domestic violence  — safety-first ordering, no "confront them" advice.
+2. Stalking           — police/cyber routing, evidence preservation caveats.
+3. Online harassment  — Indian cyber reporting, not US portals.
+4. Workplace (POSH)   — Internal Committee route, not generic advice.
+5. A non-safety case  — must NOT trigger safety-specific machinery.
+6. Legacy endpoints   — still mounted and responding.
+7. Evidence linking   — actions reference the evidence that supports them.
+
+This module previously imported ``ActionStep``, ``SourceItem`` and
+``VerificationStatus`` from ``backend.models.research``. Those names have never
+existed there, so the file failed at collection and none of it had run. It is
+rewritten here against the actual model layer.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock
-from fastapi.testclient import TestClient
+from __future__ import annotations
 
+import pytest
+from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock, MagicMock
+
+from backend.agents.action_planner import ActionPlanner
+from backend.agents.safety_plan_agent import SafetyPlanAgent
+from backend.agents.situation_agent import SituationAgent
 from backend.main import app
+from backend.models.action_plan import (
+    ActionItem,
+    ActionPlan,
+    ActionPriority,
+    ActionStatus,
+    ActionTimingPhase,
+    ActionType,
+)
 from backend.models.research import (
+    EvidenceItem,
+    EvidenceStatus,
+    FinalResearchReport,
+    ResourceVerification,
+    SearchVertical,
     Situation,
     SituationCategory,
-    Urgency,
-    ResearchTask,
-    ResearchPlan,
-    ActionPlan,
-    ActionStep,
-    ActionPriority,
-    SourceItem,
     SourceType,
-    VerificationStatus,
+    Urgency,
 )
-from backend.agents.situation_agent import SituationAgent
-from backend.agents.research_agent import ResearchAgent
-from backend.agents.action_planner import ActionPlanner
-from backend.services.serpapi_service import SerpApiService, SearchResult
 
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
 
 @pytest.fixture
 def mock_llm():
-    return AsyncMock()
+    llm = MagicMock()
+    llm.structured_generate = AsyncMock()
+    llm.is_configured = True
+    return llm
 
 
 @pytest.fixture
-def test_client():
+def client():
     return TestClient(app)
 
 
+def _evidence(**kwargs) -> EvidenceItem:
+    defaults = dict(
+        id="EVIDENCE_01",
+        source_title="Women Helpline Scheme — Ministry of Women and Child Development",
+        url="https://wcd.gov.in/schemes/women-helpline-scheme",
+        domain="wcd.gov.in",
+        source_type=SourceType.OFFICIAL_GOVERNMENT,
+        claim_supported="181 is the 24x7 national women helpline.",
+        extracted_facts=["181 operates 24x7"],
+        confidence_score=0.93,
+        status=EvidenceStatus.VERIFIED_STRONGLY_SUPPORTED,
+        why_this_source_matters="Scheme page published by the administering ministry.",
+    )
+    defaults.update(kwargs)
+    return EvidenceItem(**defaults)
+
+
 # ---------------------------------------------------------------------------
-# 1. Domestic Violence Case Test
+# 1. Domestic violence
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_domestic_violence_case(mock_llm):
-    user_input = "My husband is physically threatening me and locked me in the room. I need urgent help in New Delhi."
-
-    expected_situation = Situation(
-        case_summary="User is in immediate danger of physical violence from husband in New Delhi.",
+async def test_domestic_violence_is_classified_and_routed(mock_llm):
+    """A DV disclosure must be classified as such, with high urgency."""
+    expected = Situation(
+        case_summary="User is being threatened by their partner at home and is afraid.",
         category=SituationCategory.DOMESTIC_VIOLENCE,
-        subcategory="physical_abuse_threat",
         urgency=Urgency.CRITICAL,
-        location="New Delhi, India",
-        entities=["husband"],
-        organizations_involved=[],
-        user_goal="Escape immediate danger, access emergency shelter, and contact women helpline.",
-        known_facts=["Husband threatening physically", "User located in New Delhi"],
-        user_claims=["Locked in room"],
-        unknowns=["Current physical condition", "Immediate access to phone"],
-        missing_information=["Exact local address"],
-        questions_to_ask=["Are you in a safe room right now?", "Can you safely call 181 or 112?"],
-        recommended_research_types=["helpline", "shelter", "police"],
+        user_goal="Find a way to be safe and understand the available options.",
+        known_facts=["Partner has made threats inside the home"],
+        user_claims=[],
+        unknowns=["Whether a safe place to go is available"],
     )
+    mock_llm.structured_generate.return_value = expected
 
-    mock_llm.structured_generate.return_value = expected_situation
-
-    sit_agent = SituationAgent(mock_llm)
-    situation = await sit_agent.analyse(user_input)
+    situation = await SituationAgent(mock_llm).analyse(
+        "I am being threatened by my partner and I don't know what to do."
+    )
 
     assert situation.category == SituationCategory.DOMESTIC_VIOLENCE
-    assert situation.urgency == Urgency.CRITICAL
+    assert situation.urgency in (Urgency.HIGH, Urgency.CRITICAL)
+    assert SafetyPlanAgent.is_safety_case(situation.category.value) is True
 
-    # Test Research Planner generating specialized tasks for DV
-    expected_research_plan = ResearchPlan(
-        case_id="case-dv-101",
-        overall_strategy="Find immediate women helplines (181), Sakhi One Stop Centers, and emergency support in New Delhi.",
-        tasks=[
-            ResearchTask(
-                id="task-1",
-                description="Search for official women helpline and emergency response in New Delhi",
-                search_queries=["women helpline number 181 New Delhi emergency", "national domestic violence helpline India"],
-                expected_outcome="Direct phone numbers for immediate safety",
-                priority=1,
-            ),
-            ResearchTask(
-                id="task-2",
-                description="Find official Sakhi One Stop Centres and women shelters in New Delhi",
-                search_queries=["Sakhi One Stop Centre New Delhi location phone", "women emergency shelter Delhi government"],
-                expected_outcome="Verified shelter locations and contact details",
-                priority=1,
-            ),
-        ],
+
+def test_domestic_violence_resources_are_indian_and_attributed():
+    """National helplines must be Indian and each must carry its source."""
+    agent = SafetyPlanAgent(MagicMock())
+    resources = agent.match_resources("domestic_violence", local_resources=[], evidence=[])
+
+    numbers = {r.phone for r in resources if r.phone}
+    assert "112" in numbers
+    assert "181" in numbers
+    # No US emergency numbers anywhere in the output.
+    assert "911" not in numbers
+
+    for r in resources:
+        assert r.verification == ResourceVerification.OFFICIAL_SOURCE
+        assert r.verification_note, f"{r.name} has no provenance note"
+        assert r.url, f"{r.name} has no official source URL"
+
+
+def test_action_planner_prompt_forbids_confrontation():
+    """The safety mandate against confronting an abuser must be in the prompt."""
+    from backend.agents.action_planner import _PLANNER_SYSTEM_PROMPT
+
+    lowered = _PLANNER_SYSTEM_PROMPT.lower()
+    assert "do not tell a user to confront" in lowered or "never" in lowered
+    assert "confront" in lowered
+
+
+def test_safety_plan_prompt_forbids_confrontation_and_us_numbers():
+    from backend.agents.safety_plan_agent import _SAFETY_PLAN_SYNTHESIS_PROMPT
+
+    prompt = _SAFETY_PLAN_SYNTHESIS_PROMPT
+    assert "NEVER suggest confronting" in prompt
+    assert "911" in prompt and "NEVER mention 911" in prompt
+    assert "112" in prompt and "181" in prompt
+
+
+# ---------------------------------------------------------------------------
+# 2 & 3. Stalking and online harassment route to Indian cyber resources
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("category", ["stalking", "online_harassment"])
+def test_cyber_categories_surface_indian_cyber_reporting(category):
+    agent = SafetyPlanAgent(MagicMock())
+    resources = agent.match_resources(category, local_resources=[], evidence=[])
+
+    urls = " ".join(r.url or "" for r in resources)
+    assert "cybercrime.gov.in" in urls
+    assert any(r.phone == "1930" for r in resources)
+
+
+def test_maps_queries_are_india_specific():
+    """Local searches must name the institutions that exist in India."""
+    from backend.services.maps_service import MapsService
+
+    dv_query, _ = MapsService.build_query("domestic_violence", "Bhopal, Madhya Pradesh")
+    assert "One Stop Centre" in dv_query
+    assert "Bhopal" in dv_query
+
+    stalk_query, _ = MapsService.build_query("stalking", "Kochi, Kerala")
+    assert "Mahila" in stalk_query or "women police" in stalk_query.lower()
+
+    cyber_query, _ = MapsService.build_query("online_harassment", "Jaipur, Rajasthan")
+    assert "cyber" in cyber_query.lower()
+
+    legal_query, _ = MapsService.build_query("workplace_harassment", "Pune, Maharashtra")
+    assert "Legal Services Authority" in legal_query
+
+
+# ---------------------------------------------------------------------------
+# 4. Workplace harassment (POSH)
+# ---------------------------------------------------------------------------
+
+def test_workplace_harassment_surfaces_posh_route():
+    agent = SafetyPlanAgent(MagicMock())
+    resources = agent.match_resources("workplace_harassment", local_resources=[], evidence=[])
+
+    assert any(r.category == "posh_icc" for r in resources)
+    assert any("shebox" in (r.url or "").lower() for r in resources)
+
+
+def test_posh_is_recognised_as_a_safety_case_from_text():
+    assert SafetyPlanAgent.is_safety_case("employment", "my manager keeps making sexual comments") is True
+    assert SafetyPlanAgent.is_safety_case("other", "I need to file a POSH complaint") is True
+
+
+# ---------------------------------------------------------------------------
+# 5. Non-safety cases must not trigger safety machinery
+# ---------------------------------------------------------------------------
+
+def test_ordinary_consumer_case_is_not_a_safety_case():
+    assert SafetyPlanAgent.is_safety_case("consumer", "My laptop arrived damaged and the seller won't refund it.") is False
+    assert SafetyPlanAgent.is_safety_case("travel", "My flight was cancelled and I want a refund.") is False
+
+
+def test_consumer_case_gets_consumer_resources_not_helplines():
+    from backend.india_resources import portals_for_category
+
+    portals = portals_for_category("consumer")
+    assert portals, "A consumer case should still get the consumer redressal portal"
+    assert any("consumerhelpline" in p.url for p in portals)
+
+
+# ---------------------------------------------------------------------------
+# 6. Legacy endpoints are preserved
+# ---------------------------------------------------------------------------
+
+def test_legacy_community_endpoint_still_responds(client):
+    resp = client.get("/get-admin-posts")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+def test_legacy_community_posts_do_not_expose_contact_details(client):
+    """The community feed is public — contact fields must be stripped."""
+    posts = client.get("/get-admin-posts").json()
+    for post in posts:
+        keys = {k.lower() for k in post}
+        assert "contact info" not in keys
+        assert "contact_info" not in keys
+        assert "phone" not in keys
+        assert "preferred way of contact" not in keys
+
+
+def test_health_endpoint_reports_integration_status(client):
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert "integrations" in body
+    assert "database" in body
+
+
+def test_find_match_rejects_arbitrary_collections(client):
+    """The collection name must not be a free-text path into the database."""
+    resp = client.get("/find-match", params={"info": "x", "collection": "cases"})
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# 7. Evidence linking
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_action_plan_actions_reference_their_evidence(mock_llm):
+    """Every recommendation must point at the source that supports it."""
+    evidence = [_evidence()]
+    report = FinalResearchReport(
+        case_id="case-dv-1",
+        situation=Situation(
+            case_summary="Threatened at home by a partner.",
+            category=SituationCategory.DOMESTIC_VIOLENCE,
+            urgency=Urgency.HIGH,
+            user_goal="Be safe and understand my options.",
+        ),
+        evidence=evidence,
     )
-    mock_llm.structured_generate.return_value = expected_research_plan
 
-    res_agent = ResearchAgent(mock_llm)
-    plan = await res_agent.plan_research("case-dv-101", situation)
-
-    assert len(plan.tasks) == 2
-    assert any("helpline" in t.description.lower() for t in plan.tasks)
-
-    # Test Action Planner generating safety-first action plan
-    expected_action_plan = ActionPlan(
-        case_id="case-dv-101",
-        summary="Immediate safety plan and emergency support for domestic violence victim.",
+    mock_llm.structured_generate.return_value = ActionPlan(
+        case_id="case-dv-1",
+        summary="Immediate safety first, then support and formal options.",
         immediate_actions=[
-            ActionStep(
-                id="act-1",
-                title="Call Emergency Services / Helpline 181",
-                description="If safe, call 112 (Emergency Response) or 181 (Women Helpline) immediately.",
+            ActionItem(
+                id="",
+                title="Call 181 or 112 if you are in danger",
+                description="181 is the national women helpline and operates 24x7.",
+                action_type=ActionType.CONTACT,
                 priority=ActionPriority.IMMEDIATE,
-                category="SAFETY FIRST",
-                evidence_ids=["ev-1"],
+                evidence_ids=["EVIDENCE_01"],
             )
         ],
-        short_term_actions=[
-            ActionStep(
-                id="act-2",
-                title="Contact Sakhi One Stop Centre",
-                description="Reach out to the nearest government Sakhi Centre for safe temporary shelter and legal assistance.",
-                priority=ActionPriority.HIGH,
-                category="SUPPORT OPTIONS",
-                evidence_ids=["ev-2"],
-            )
-        ],
-        long_term_actions=[
-            ActionStep(
-                id="act-3",
-                title="File Protection Order under Domestic Violence Act",
-                description="Consult legal counsel or free legal aid to file for a protection order.",
-                priority=ActionPriority.MEDIUM,
-                category="FORMAL OPTIONS",
-                evidence_ids=["ev-3"],
-            )
-        ],
-        safety_warning="DO NOT confront the perpetrator directly. Prioritize your physical safety above all.",
-    )
-    mock_llm.structured_generate.return_value = expected_action_plan
-
-    act_planner = ActionPlanner(mock_llm)
-    sources = [
-        SourceItem(
-            id="ev-1",
-            title="National Commission for Women - 181 Helpline",
-            url="http://ncw.nic.in/helplines",
-            source_type=SourceType.OFFICIAL_GOVERNMENT,
-            verification_status=VerificationStatus.VERIFIED,
-            key_insights=["181 is 24/7 emergency hotline for women in India"],
-        )
-    ]
-    action_plan = await act_planner.generate_plan("case-dv-101", situation, sources)
-
-    assert action_plan.immediate_actions[0].category == "SAFETY FIRST"
-    assert "DO NOT confront" in action_plan.safety_warning
-
-
-# ---------------------------------------------------------------------------
-# 2. Stalking Case Test
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_stalking_case(mock_llm):
-    user_input = "An unknown person has been following me home from work for 3 days and sending threatening notes."
-
-    expected_situation = Situation(
-        case_summary="User is being physically stalked and harassed by an unidentified individual on their daily commute.",
-        category=SituationCategory.STALKING,
-        subcategory="physical_stalking",
-        urgency=Urgency.HIGH,
-        location="Mumbai, Maharashtra",
-        entities=["stalker"],
-        organizations_involved=[],
-        user_goal="Stop the stalking, report to police women's cell, and ensure personal safety.",
-        known_facts=["Followed home for 3 days", "Received threatening notes"],
-        user_claims=[],
-        unknowns=["Identity of stalker"],
-        missing_information=["Commute route details"],
-        questions_to_ask=["Have you informed a trusted person or workplace security?"],
-        recommended_research_types=["police", "legal"],
+        next_actions=[],
+        escalation_options=[],
+        things_to_avoid=["Do not confront the person causing harm."],
     )
 
-    mock_llm.structured_generate.return_value = expected_situation
+    plan = await ActionPlanner(mock_llm).plan(report)
 
-    sit_agent = SituationAgent(mock_llm)
-    situation = await sit_agent.analyse(user_input)
-
-    assert situation.category == SituationCategory.STALKING
-    assert situation.urgency == Urgency.HIGH
-
-
-# ---------------------------------------------------------------------------
-# 3. Online Harassment Case Test
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_online_harassment_case(mock_llm):
-    user_input = "Someone created a fake profile with my pictures and is sending non-consensual explicit messages to my colleagues."
-
-    expected_situation = Situation(
-        case_summary="User is facing non-consensual image abuse and impersonation via fake social media profile.",
-        category=SituationCategory.ONLINE_HARASSMENT,
-        subcategory="impersonation_cyber_harassment",
-        urgency=Urgency.HIGH,
-        location=None,
-        entities=["fake profile"],
-        organizations_involved=["Social Media Platform"],
-        user_goal="Take down fake profile, report to National Cyber Crime Reporting Portal, and preserve evidence.",
-        known_facts=["Fake profile created using real photos", "Explicit messages sent to colleagues"],
-        user_claims=[],
-        unknowns=["IP address or identity of creator"],
-        missing_information=["Platform URL"],
-        questions_to_ask=["Have you taken full screenshots showing URLs, timestamps, and profile handles?"],
-        recommended_research_types=["cybercrime", "platform_policy"],
-    )
-
-    mock_llm.structured_generate.return_value = expected_situation
-
-    sit_agent = SituationAgent(mock_llm)
-    situation = await sit_agent.analyse(user_input)
-
-    assert situation.category == SituationCategory.ONLINE_HARASSMENT
-
-
-# ---------------------------------------------------------------------------
-# 4. Workplace Harassment Case Test
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_workplace_harassment_case(mock_llm):
-    user_input = "My manager made sexual advances and threatened to fire me if I report it. Our company has no clear HR process."
-
-    expected_situation = Situation(
-        case_summary="User experiencing workplace sexual harassment and retaliatory threats from a direct manager.",
-        category=SituationCategory.WORKPLACE_HARASSMENT,
-        subcategory="posh_quid_pro_quo",
-        urgency=Urgency.HIGH,
-        location="Bengaluru, India",
-        entities=["manager"],
-        organizations_involved=["Employer Company"],
-        user_goal="File formal complaint under POSH Act, preserve evidence, and protect employment.",
-        known_facts=["Manager made explicit advances", "Threatened termination if reported"],
-        user_claims=[],
-        unknowns=["Presence of Internal Complaints Committee (ICC)"],
-        missing_information=["Company size"],
-        questions_to_ask=["Does your company have an Internal Complaints Committee (ICC)?"],
-        recommended_research_types=["legal", "posh"],
-    )
-
-    mock_llm.structured_generate.return_value = expected_situation
-
-    sit_agent = SituationAgent(mock_llm)
-    situation = await sit_agent.analyse(user_input)
-
-    assert situation.category == SituationCategory.WORKPLACE_HARASSMENT
-
-
-# ---------------------------------------------------------------------------
-# 5. Non-Women Consumer Case Test (Verification of generic routing)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_non_women_consumer_case(mock_llm):
-    user_input = "I bought a smartphone online, it stopped turning on after 2 days, and the brand is refusing warranty repair."
-
-    expected_situation = Situation(
-        case_summary="Defective smartphone purchased online with warranty service denial by manufacturer.",
-        category=SituationCategory.CONSUMER,
-        subcategory="defective_electronics_warranty",
-        urgency=Urgency.MEDIUM,
-        location=None,
-        entities=["smartphone"],
-        organizations_involved=["E-commerce seller", "Manufacturer"],
-        user_goal="Get warranty repair, replacement, or full refund.",
-        known_facts=["Smartphone stopped working after 2 days", "Manufacturer refused warranty"],
-        user_claims=[],
-        unknowns=["Warranty policy fine print"],
-        missing_information=["Brand name"],
-        questions_to_ask=["Do you have the original tax invoice and warranty card?"],
-        recommended_research_types=["web", "consumer_forum"],
-    )
-
-    mock_llm.structured_generate.return_value = expected_situation
-
-    sit_agent = SituationAgent(mock_llm)
-    situation = await sit_agent.analyse(user_input)
-
-    # Ensure it routes to CONSUMER, NOT women's safety category
-    assert situation.category == SituationCategory.CONSUMER
-    assert situation.category != SituationCategory.DOMESTIC_VIOLENCE
-    assert situation.category != SituationCategory.SAFETY
-
-
-# ---------------------------------------------------------------------------
-# 6. Legacy Endpoints Preservation Test
-# ---------------------------------------------------------------------------
-
-def test_legacy_endpoints_preserved(test_client):
-    # Test health check endpoint
-    response = test_client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-
-    # Test legacy GET posts endpoint
-    response = test_client.get("/get-posts")
-    assert response.status_code == 200
-    assert "posts" in response.json()
-
-    # Test legacy GET admin posts endpoint
-    response = test_client.get("/get-admin-posts")
-    assert response.status_code == 200
-
-    # Test legacy LawBot endpoint
-    response = test_client.post("/lawbot", json={"prompt": "What are my consumer rights?"})
-    assert response.status_code in [200, 500]  # Depends on Gemini API key availability in test env
-
-    # Test legacy TherapyBot endpoint
-    response = test_client.post("/therapybot", json={"prompt": "I feel stressed"})
-    assert response.status_code in [200, 500]
-
-
-# ---------------------------------------------------------------------------
-# 7. SerpApi Integration Execution Check
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_serpapi_execution_check():
-    # Test SerpApiService initialization and search method call structure
-    service = SerpApiService(api_key="test_mock_key")
-    assert service.api_key == "test_mock_key"
-    
-    # Mock live search execution
-    mock_raw_response = {
-        "organic_results": [
-            {
-                "title": "National Commission for Women - Official Portal",
-                "link": "http://ncw.nic.in",
-                "snippet": "24/7 National Women Helpline: 181. Support for women in distress.",
-                "position": 1,
-            }
-        ]
-    }
-    
-    with pytest.MonkeyPatch().context() as m:
-        m.setattr(service, "search_web", AsyncMock(return_value=[
-            SearchResult(
-                title="National Commission for Women - Official Portal",
-                url="http://ncw.nic.in",
-                source="ncw.nic.in",
-                snippet="24/7 National Women Helpline: 181. Support for women in distress.",
-                position=1,
-                result_type="organic",
-            )
-        ]))
-        
-        results = await service.search_web("women helpline 181")
-        assert len(results) == 1
-        assert results[0].url == "http://ncw.nic.in"
-        assert "181" in results[0].snippet
-
-
-# ---------------------------------------------------------------------------
-# 8. Evidence Linked to Action Plan Recommendations
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_evidence_linked_to_actions(mock_llm):
-    situation = Situation(
-        case_summary="Cyber harassment case",
-        category=SituationCategory.ONLINE_HARASSMENT,
-        urgency=Urgency.HIGH,
-        user_goal="File formal cybercrime complaint",
-    )
-    
-    sources = [
-        SourceItem(
-            id="src-cyber-101",
-            title="National Cyber Crime Reporting Portal",
-            url="https://cybercrime.gov.in",
-            source_type=SourceType.OFFICIAL_GOVERNMENT,
-            verification_status=VerificationStatus.VERIFIED,
-            key_insights=["File online harassment complaints at cybercrime.gov.in"],
-        )
-    ]
-
-    expected_plan = ActionPlan(
-        case_id="case-cyber-001",
-        summary="Action steps to lodge complaint on cybercrime portal",
-        immediate_actions=[
-            ActionStep(
-                id="act-1",
-                title="Document evidence",
-                description="Save screenshots of harassing messages with dates and timestamps.",
-                priority=ActionPriority.IMMEDIATE,
-                category="EVIDENCE/DOCUMENTATION",
-            )
-        ],
-        short_term_actions=[
-            ActionStep(
-                id="act-2",
-                title="Lodge online complaint",
-                description="Submit complaint on the official portal.",
-                priority=ActionPriority.HIGH,
-                category="FORMAL OPTIONS",
-                evidence_ids=["src-cyber-101"],
-            )
-        ],
-    )
-    mock_llm.structured_generate.return_value = expected_plan
-
-    act_planner = ActionPlanner(mock_llm)
-    result_plan = await act_planner.generate_plan("case-cyber-001", situation, sources)
-
-    assert len(result_plan.short_term_actions[0].evidence_ids) > 0
-    assert result_plan.short_term_actions[0].evidence_ids[0] == "src-cyber-101"
+    assert plan.actions, "Actions should be flattened for the UI"
+    first = plan.immediate_actions[0]
+    assert first.id, "Missing action ids must be filled in"
+    assert first.timing_phase == ActionTimingPhase.DO_NOW
+    assert "EVIDENCE_01" in first.evidence_ids
+    # The claimed evidence must actually exist in the report.
+    known_ids = {e.id for e in evidence}
+    assert set(first.evidence_ids).issubset(known_ids)
+    assert any("confront" in t.lower() for t in plan.things_to_avoid)

@@ -2,7 +2,6 @@
 
 This document provides a comprehensive audit of Haven's existing codebase, inspecting all capabilities related to women's safety, domestic violence, harassment, mental health support, legal information, helplines, community features, and existing AI bots.
 
----
 
 ## 1. Feature-by-Feature Audit
 

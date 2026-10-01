@@ -38,6 +38,7 @@ from backend.models.research import (
     FinalResearchReport,
     FreshnessPolicy,
     LocalResource,
+    ResearchDegradation,
     ResearchExecutionResult,
     ResearchMetrics,
     ResearchPlan,
@@ -77,11 +78,29 @@ def sanitize_search_query(raw_query: str) -> str:
 
 
 def normalize_query_key(query: str, vertical: str, location: Optional[str]) -> str:
-    """Canonical string key for deduplicating queries."""
-    clean_q = re.sub(r'[^\w\s]', '', query.lower()).strip()
-    clean_v = vertical.lower().strip()
-    clean_loc = (location or "").lower().strip()
+    """Canonical string key for deduplicating queries.
+
+    Runs of whitespace are collapsed, so "official  women   helpline" and
+    "official women helpline" map to the same key instead of being billed as
+    two separate SerpApi searches.  Vertical aliases (``maps``/``local``,
+    ``web``/``google_search``) are folded together for the same reason.
+    """
+    clean_q = " ".join(re.sub(r"[^\w\s]", " ", query.lower()).split())
+    clean_v = _canonical_vertical(vertical)
+    clean_loc = " ".join((location or "").lower().split())
     return f"{clean_v}:{clean_q}:{clean_loc}"
+
+
+def _canonical_vertical(vertical: Any) -> str:
+    """Collapse vertical names and enum reprs onto web | news | maps."""
+    raw = getattr(vertical, "value", str(vertical)).lower()
+    # ``str(SearchVertical.WEB)`` renders as "SearchVertical.WEB", so match on
+    # substrings rather than equality.
+    if "news" in raw:
+        return "news"
+    if "map" in raw or "local" in raw:
+        return "maps"
+    return "web"
 
 
 # ---------------------------------------------------------------------------
@@ -91,24 +110,46 @@ def normalize_query_key(query: str, vertical: str, location: Optional[str]) -> s
 _ORCHESTRATOR_SYSTEM_PROMPT = """\
 You are HerWay's Research Orchestrator, an intelligent planner for live SerpApi searches.
 
+JURISDICTION: India. Unless the user explicitly states another country, every
+query must target Indian law, Indian government portals and Indian services.
+Never plan a search for US/UK helplines or statutes for an Indian user.
+
 Your objective: MAXIMIZE THE INFORMATIONAL VALUE OF EACH SEARCH.
 Do NOT maximize search volume. Every query must answer a specific need.
 
+DECIDE FIRST WHETHER A SEARCH IS NEEDED AT ALL:
+- If the situation is purely emotional support with no factual, legal or
+  resource question, return ZERO tasks. Do not search for the sake of it.
+- Only plan a task when a concrete, answerable question depends on it.
+
 ROUTING STRATEGY BY VERTICAL:
 1. Google Web (vertical="web"):
-   - Official procedures, statutory acts, consumer protection laws, emergency numbers, complaint portals.
-   - Set official_source_preference="required" or "preferred".
-2. Google Maps / Local (vertical="maps" or "local"):
-   - Physical assistance: women's shelters, One Stop Support Centres (Sakhi), women police stations, cyber cells, legal aid clinics, consumer courts.
-   - Use ONLY when location is relevant and known.
+   - Official procedures, statutory acts (PWDVA 2005, POSH Act 2013, BNS/IPC,
+     IT Act), national helpline numbers, government complaint portals.
+   - Prefer .gov.in and .nic.in sources; set official_source_preference="required"
+     when a wrong answer would be harmful (law, procedure, emergency numbers).
+2. Google Maps / Local (vertical="maps"):
+   - Physical assistance: One Stop Centres (Sakhi), women police stations,
+     Mahila Thana, cyber crime cells, District Legal Services Authority (DLSA)
+     offices, shelter homes (Swadhar Greh / Ujjwala), consumer courts.
+   - Use ONLY when a location (state / city / district) is actually known.
+     Never guess a location. If none is known, search national resources on web.
 3. Google News (vertical="news"):
-   - Use SELECTIVELY only when the case depends on recent policy changes, breaking news, or corporate/government announcements.
-   - Do NOT use News for generic advice.
+   - Use SELECTIVELY and only when the case turns on a recent change: a new
+     rule, a changed portal, an ongoing incident.
+   - Do NOT use News for generic advice or for settled statutory procedure.
+
+FRESHNESS:
+- freshness_policy="static" for statutory definitions that rarely change.
+- freshness_policy="current" for helpline numbers, portals, office addresses.
+- freshness_policy="time_sensitive" when urgency is high and stale data is unsafe.
 
 SEARCH BUDGET & CONSTRAINTS:
-- Normal cases: Generate 2 to 4 high-impact ResearchTask items.
-- Complex/Critical cases: Generate up to 5-6 tasks.
-- Keep queries focused and targeted (e.g. "official women helpline domestic violence India" or "women shelter domestic violence Austin TX").
+- Normal cases: 2 to 4 high-impact ResearchTask items.
+- Complex/Critical cases: up to 5-6 tasks.
+- Keep queries short and keyword-like, e.g.
+  "women helpline 181 official site", "POSH Act internal committee complaint procedure",
+  "One Stop Centre Sakhi <district>", "cybercrime.gov.in report online harassment".
 - Never include personal names, emails, or phone numbers in queries.
 
 Respond with valid JSON matching the ResearchPlan schema.
@@ -165,9 +206,15 @@ class ResearchOrchestrator:
             f"Iteration: {iteration}\n"
         )
 
+        # A class body cannot read a name it is also assigning, so the previous
+        # `case_id: str = case_id` raised NameError on every planning call and
+        # research never ran. Bind the defaults outside the class body instead.
+        _default_case_id = case_id
+        _default_budget = budget
+
         class _PlanWrapper(ResearchPlan):
-            case_id: str = case_id  # type: ignore[assignment]
-            search_budget: int = budget
+            case_id: str = _default_case_id
+            search_budget: int = _default_budget
 
         plan = await self._llm.structured_generate(
             system_prompt=_ORCHESTRATOR_SYSTEM_PROMPT,
@@ -246,36 +293,36 @@ class ResearchOrchestrator:
 
             seen_keys.add(norm_key)
             metrics.search_count += 1
+            engine = _canonical_vertical(task.vertical)
+            freshness = (
+                task.freshness_policy.value
+                if hasattr(task.freshness_policy, "value")
+                else str(task.freshness_policy)
+            )
 
             try:
-                # 2. Dispatch to appropriate SerpApi method
-                results: List[SearchResult] = []
-                if task.vertical in (SearchVertical.NEWS, "news"):
+                # 2. Dispatch to the appropriate SerpApi vertical.
+                if engine == "news":
                     metrics.news_search_count += 1
-                    results = await self._serpapi.search_news(
-                        query=task.query,
-                        location=task.location,
-                        case_id=plan.case_id,
-                        search_id=s_id,
-                    )
-                elif task.vertical in (SearchVertical.MAPS, SearchVertical.LOCAL, "maps", "local"):
+                    vertical = SearchVertical.NEWS
+                elif engine == "maps":
                     metrics.maps_search_count += 1
                     metrics.local_search_count += 1
-                    results = await self._serpapi.search_maps(
-                        query=task.query,
-                        location=task.location,
-                        case_id=plan.case_id,
-                        search_id=s_id,
-                    )
+                    vertical = SearchVertical.MAPS
                 else:
                     metrics.web_search_count += 1
-                    results = await self._serpapi.search_web(
-                        query=task.query,
-                        location=task.location,
-                        case_id=plan.case_id,
-                        search_id=s_id,
-                    )
+                    vertical = SearchVertical.WEB
 
+                outcome = await self._serpapi.search_detailed(
+                    query=task.query,
+                    vertical=vertical,
+                    location=task.location,
+                    case_id=plan.case_id,
+                    search_id=s_id,
+                    reason=task.purpose,
+                )
+
+                results = outcome.results
                 time_taken = round((time.time() - start_t) * 1000, 2)
                 selected_urls = [r.url for r in results[:4] if r.url]
 
@@ -283,15 +330,18 @@ class ResearchOrchestrator:
                     task_id=task.task_id,
                     why_searched=task.purpose,
                     query=task.query,
-                    engine=task.vertical.value if hasattr(task.vertical, "value") else str(task.vertical),
+                    engine=engine,
                     results_found=len(results),
                     sources_used=len(selected_urls),
                     selected_urls=selected_urls,
                     time_taken_ms=time_taken,
-                    is_cached=False,
+                    is_cached=outcome.from_cache,
                     is_followup=task.is_followup,
-                    freshness_policy=task.freshness_policy.value if hasattr(task.freshness_policy, "value") else str(task.freshness_policy),
-                    success=True,
+                    freshness_policy=freshness,
+                    # A failed vertical is recorded as a failure so the case can
+                    # tell the user exactly which part of the research is missing.
+                    success=outcome.success,
+                    error=outcome.error_message,
                 )
                 return trace, results
 
@@ -302,14 +352,14 @@ class ResearchOrchestrator:
                     task_id=task.task_id,
                     why_searched=task.purpose,
                     query=task.query,
-                    engine=str(task.vertical),
+                    engine=engine,
                     results_found=0,
                     sources_used=0,
                     selected_urls=[],
                     time_taken_ms=time_taken,
                     is_cached=False,
                     is_followup=task.is_followup,
-                    freshness_policy=str(task.freshness_policy),
+                    freshness_policy=freshness,
                     success=False,
                     error=str(exc),
                 )
@@ -335,6 +385,39 @@ class ResearchOrchestrator:
             metrics=metrics,
         )
 
+    @staticmethod
+    def _summarise_search_failures(
+        trace: List[ResearchTraceEntry],
+    ) -> List[ResearchDegradation]:
+        """Turn failed trace entries into one user-facing message per vertical.
+
+        Without this, a case where (say) Maps failed but Web succeeded looked
+        identical to a case where there simply were no nearby centres.
+        """
+        failed_engines: Dict[str, str] = {}
+        for entry in trace:
+            if entry.success:
+                continue
+            failed_engines.setdefault(entry.engine, entry.error or "Search did not complete")
+
+        messages = {
+            "web": "The web search for official procedures and portals did not complete.",
+            "news": "The search for recent news updates did not complete.",
+            "maps": "The search for nearby centres and offices did not complete.",
+        }
+
+        return [
+            ResearchDegradation(
+                stage=f"{engine}_search",
+                reason="search_failed",
+                user_message=(
+                    f"{messages.get(engine, 'Part of the research did not complete.')} "
+                    "Anything shown below came from searches that did succeed."
+                ),
+            )
+            for engine, _err in failed_engines.items()
+        ]
+
     async def run_full_orchestration(
         self,
         case_id: str,
@@ -349,21 +432,100 @@ class ResearchOrchestrator:
         Pass 2: Quality Loop & Contradiction Resolution (if evidence is weak or contradictory)
         """
         logger.info("ResearchOrchestrator: Starting orchestration for case %s (Category: %s)", case_id, situation.category.value)
-        
+
+        degradations: List[ResearchDegradation] = []
+
         # 1. Initial Plan & Concurrent Execution
-        initial_plan = await self.plan_research(case_id, situation, user_location, iteration=1)
+        try:
+            initial_plan = await self.plan_research(case_id, situation, user_location, iteration=1)
+        except Exception as exc:
+            # Planning depends on the LLM. If it is down we still want to return
+            # a case the user can open, with an honest explanation.
+            logger.error("ResearchOrchestrator: planning failed for case %s: %s", case_id, exc)
+            degradations.append(
+                ResearchDegradation(
+                    stage="planning",
+                    reason="planner_unavailable",
+                    user_message=(
+                        "We could not plan live research for this case right now. "
+                        "Your situation has been saved and you can retry research at any time."
+                    ),
+                )
+            )
+            initial_plan = ResearchPlan(
+                case_id=case_id,
+                reasoning="Planning unavailable.",
+                tasks=[],
+                search_budget=self.determine_budget(situation),
+            )
+
         exec_res = await self.execute_plan(initial_plan)
+
+        # Surface per-vertical failures so a partial result is never shown as whole.
+        degradations.extend(self._summarise_search_failures(exec_res.trace))
 
         # 2. Location Resource Discovery via MapsService
         loc_str = situation.location or (user_location.display_name if user_location else None)
-        local_resources = await maps_service.discover_local_resources(
-            category=situation.category.value,
-            location=loc_str,
-            case_summary=situation.case_summary,
-        )
+        local_resources: List[LocalResource] = []
+        if loc_str:
+            try:
+                local_discovery = await maps_service.discover_local_resources_detailed(
+                    category=situation.category.value,
+                    location=loc_str,
+                    case_summary=situation.case_summary,
+                )
+                local_resources = local_discovery.resources
+                if not local_discovery.success:
+                    degradations.append(
+                        ResearchDegradation(
+                            stage="local_search",
+                            reason=local_discovery.failure_reason,
+                            user_message=(
+                                f"We could not search for support centres near {loc_str} right now. "
+                                "The national resources and sources below are still current."
+                            ),
+                        )
+                    )
+            except Exception as exc:
+                logger.error("ResearchOrchestrator: local discovery failed: %s", exc)
+                degradations.append(
+                    ResearchDegradation(
+                        stage="local_search",
+                        reason="local_search_error",
+                        user_message=(
+                            f"We could not search for support centres near {loc_str} right now. "
+                            "The national resources and sources below are still current."
+                        ),
+                    )
+                )
+        else:
+            degradations.append(
+                ResearchDegradation(
+                    stage="local_search",
+                    reason="no_location_provided",
+                    user_message=(
+                        "You have not shared a location, so we have not looked for nearby centres. "
+                        "Add your city or district to find One Stop Centres and support services near you."
+                    ),
+                )
+            )
 
         # 3. Source Verification & Trust Scoring (Pass 1)
-        evidence = await verifier.verify(situation, exec_res.results)
+        try:
+            evidence = await verifier.verify(situation, exec_res.results)
+        except Exception as exc:
+            logger.error("ResearchOrchestrator: verification failed: %s", exc)
+            evidence = []
+            degradations.append(
+                ResearchDegradation(
+                    stage="verification",
+                    reason="verifier_unavailable",
+                    user_message=(
+                        "We found search results but could not verify them, so they are not shown. "
+                        "HerWay only shows sources it has been able to check."
+                    ),
+                )
+            )
 
         total_trace = list(exec_res.trace)
         total_results = list(exec_res.results)
@@ -456,6 +618,8 @@ class ResearchOrchestrator:
             metrics=metrics,
             unique_domains=list(unique_domains),
             official_domains=list(official_domains),
+            degradations=degradations,
+            location_used=loc_str,
         )
 
         logger.info(

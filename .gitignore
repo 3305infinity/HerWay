@@ -9,3 +9,9 @@ backend/__pycache__/
 backend/utils/__pycache__/*
 frontend/.env.local
 frontend/node_modules
+.kilo
+
+# Python bytecode (was only ignored for two directories)
+__pycache__/
+*.py[cod]
+.pytest_cache/
