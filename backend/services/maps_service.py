@@ -38,6 +38,7 @@ from backend.models.research import (
     SearchVertical,
 )
 from backend.services.serpapi_service import SerpApiService
+from backend.trace import log_fields
 
 load_dotenv()
 
@@ -194,7 +195,18 @@ class MapsService:
         clean_loc = location.strip()
         query, res_type = self.build_query(category, clean_loc)
 
-        logger.info("MapsService: Discovering local resources with query='%s'", query)
+        # The query is built from the user's category and location, so logging
+        # it verbatim would record that an identifiable session searched for,
+        # say, a women's shelter in a named district. Log its shape instead.
+        logger.info(
+            "MapsService: discovering local resources %s",
+            log_fields(
+                resource_type=res_type,
+                category=category,
+                has_location=bool(clean_loc),
+                query_chars=len(query),
+            ),
+        )
 
         outcome = await self._serpapi.search_detailed(
             query=query,

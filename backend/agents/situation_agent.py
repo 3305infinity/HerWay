@@ -28,6 +28,8 @@ import logging
 from typing import TYPE_CHECKING
 
 from backend.models.research import Situation, SituationCategory
+from backend.safety_triage import apply_triage_to_text
+from backend.trace import log_fields
 
 if TYPE_CHECKING:
     from backend.services.llm_service import LLMService
@@ -48,8 +50,37 @@ CRITICAL RULES:
 
 2. CATEGORY SELECTION:
    Assign the single best category from:
-   [consumer, housing, employment, education, financial, travel, cyber, legal_information, government_service, safety, health_information, domestic_violence, sexual_harassment, stalking, online_harassment, threats, coercive_control, unsafe_relationship, workplace_harassment, other_women_safety, other]
+   [consumer, housing, employment, education, financial, travel, cyber, legal_information, government_service, safety, health_information, domestic_violence, sexual_harassment, stalking, online_harassment, threats, coercive_control, unsafe_relationship, workplace_harassment, other_women_safety, immediate_danger, street_harassment, unsafe_travel, campus_safety, emotional_distress, safety_planning, local_discovery, other]
    If confidence is low or ambiguous, select "other".
+   Use "immediate_danger" ONLY when harm is happening now or within minutes.
+   Use "emotional_distress" when the user wants to be heard and has asked no
+   factual question. Use "safety_planning" when nothing is wrong right now but
+   they want to prepare. Use "local_discovery" for "what is near me" with no
+   incident disclosed.
+
+5. INTENT:
+   What the user wants from HerWay right now — one of:
+   [get_to_safety, understand_options, take_formal_action, find_local_help,
+    emotional_support, plan_ahead, preserve_evidence, other]
+   This is NOT the same as user_goal. user_goal is their real-world outcome
+   ("get a restraining order"); intent is what they need from this app in this
+   moment ("understand_options").
+
+6. CONSTRAINTS:
+   Record limits the user actually stated, in their words — "cannot leave the
+   children", "he checks my phone", "no money of my own", "do not tell my
+   family". NEVER infer a constraint that was not stated. An empty list is
+   correct and expected.
+
+7. IMMEDIATE DANGER SIGNALS:
+   If and only if the user's words indicate danger now, quote the exact
+   fragments into immediate_danger_signals. Quote; do not paraphrase, and do
+   not add a signal that is not literally present in their message.
+
+8. URGENCY:
+   Be conservative. If you are unsure between two levels, choose the higher
+   one. Do not downgrade urgency because the user is writing calmly — people
+   describe severe danger in flat language.
 
 3. MISSING INFORMATION & QUESTIONS:
    - Identify missing details that materially affect research (e.g., purchase date, platform/seller name, user's country/state, payment method, warranty status, complaint number).
@@ -71,7 +102,10 @@ class SituationAgent:
 
     async def analyse(self, user_text: str) -> Situation:
         """Analyze raw text description into a typed Situation model."""
-        logger.info("SituationAgent: analyzing %d characters of user input", len(user_text))
+        logger.info(
+            "SituationAgent: analysing input %s",
+            log_fields(input_chars=len(user_text)),
+        )
 
         situation = await self._llm.structured_generate(
             system_prompt=_SYSTEM_PROMPT,
@@ -79,14 +113,34 @@ class SituationAgent:
             output_schema=Situation,
         )
 
+        # Deterministic triage over the user's own words, applied on top of the
+        # model's judgement. It can only raise urgency, never lower it: a model
+        # that under-reads "he is outside my door" must not decide this is a
+        # routine case. It also sets the workflow, so routing keeps working
+        # when the model is degraded. See backend/safety_triage.py.
+        situation = apply_triage_to_text(situation, user_text)
+
+        # Counts and classifications only. This previously logged the first 60
+        # characters of `case_summary`, which is a paraphrase of what the user
+        # just disclosed — a log line reading "husband hit me again last night"
+        # is exactly the kind of record this product must not create.
         logger.info(
-            "SituationAgent: summary='%s...', category=%s, urgency=%s, %d facts, %d claims, %d unknowns",
-            situation.case_summary[:60],
-            situation.category,
-            situation.urgency,
-            len(situation.known_facts),
-            len(situation.user_claims),
-            len(situation.unknowns),
+            "SituationAgent: analysed %s",
+            log_fields(
+                category=situation.category.value,
+                urgency=situation.urgency.value,
+                intent=situation.intent.value,
+                workflow=(
+                    situation.recommended_workflow.value
+                    if situation.recommended_workflow
+                    else None
+                ),
+                danger_signals=len(situation.immediate_danger_signals),
+                facts=len(situation.known_facts),
+                claims=len(situation.user_claims),
+                unknowns=len(situation.unknowns),
+                has_location=bool(situation.location),
+            ),
         )
 
         return situation

@@ -216,6 +216,12 @@ export interface ChatReply {
   lawbot_docs?: string[];
   formal_report?: string | null;
   degraded_notice?: string | null;
+  /**
+   * Diagnostic identifier for the request that produced this reply. Useful to
+   * quote when reporting a problem; it can be matched to the server logs.
+   * Optional, and never an authorization token — it grants access to nothing.
+   */
+  trace_id?: string | null;
 }
 
 export interface NationalHelpline {

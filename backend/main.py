@@ -34,6 +34,14 @@ from fastapi.responses import JSONResponse
 from backend.auth import clerk_is_configured, startup_auth_check
 from backend.db import get_database, database_mode
 from backend.logger import CustomFormatter
+from backend.trace import (
+    TRACE_HEADER,
+    coerce_trace_id,
+    get_trace_id,
+    install_log_filter,
+    reset_trace_id,
+    set_trace_id,
+)
 
 # Import routers
 from backend.routes.cases import router as cases_router
@@ -47,10 +55,24 @@ from backend.routes.resources import router as resources_router
 # Logging
 # ---------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-handler.setFormatter(CustomFormatter())
-logger.addHandler(handler)
+
+# Configure the `backend` package logger rather than just `backend.main`.
+# Every module uses `logging.getLogger(__name__)`, so `backend.routes.cases`,
+# `backend.agents.chat_agent` and the rest are its children. Attaching the
+# handler here means all of them are formatted by CustomFormatter — and so all
+# of them carry the request's trace ID. Previously only `backend.main` had a
+# handler and everything else propagated to uvicorn's root handler, which knows
+# nothing about traces.
+_package_logger = logging.getLogger("backend")
+_package_logger.setLevel(logging.INFO)
+if not any(isinstance(h, logging.StreamHandler) for h in _package_logger.handlers):
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(CustomFormatter())
+    _package_logger.addHandler(_handler)
+    # Already rendered here; letting it propagate would print every line twice.
+    _package_logger.propagate = False
+
+install_log_filter(_package_logger)
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +113,11 @@ def _integration_status() -> dict[str, bool]:
     return {
         "gemini": bool(os.getenv("GEMINI_API_KEY")),
         "serpapi": bool(os.getenv("SERPAPI_API_KEY") or os.getenv("SERPAPI_KEY")),
-        "mongodb": bool(os.getenv("MONGO_ENDPOINT") or os.getenv("MONGODB_URI")),
+        # Whether the connection actually succeeded, not merely whether a URI
+        # was configured. Reporting `true` for a set-but-unreachable URI told an
+        # operator that cases were being persisted while they were in fact being
+        # held in a volatile in-memory store.
+        "mongodb": database_mode() == "mongodb",
         "clerk": clerk_is_configured(),
         "groq": bool(os.getenv("GROQ_API_TOKEN")),
         "opencage": bool(os.getenv("OPENCAGE_API_KEY")),
@@ -132,6 +158,8 @@ async def catch_unhandled_errors(request: Request, call_next):
     """Return a plain, non-leaking error instead of an HTML stack trace.
 
     A traceback in a response body could expose case contents or file paths.
+    The trace ID is included so a user can quote it when reporting a problem;
+    it identifies the request in the logs and grants no access to anything.
     """
     try:
         return await call_next(request)
@@ -143,9 +171,33 @@ async def catch_unhandled_errors(request: Request, call_next):
                 "detail": (
                     "Something went wrong on our side. Your information is safe. "
                     "Please try again."
-                )
+                ),
+                "trace_id": get_trace_id(),
             },
         )
+
+
+# Registered after `catch_unhandled_errors`, which makes it the OUTER
+# middleware (Starlette inserts each new middleware at the front of the stack).
+# The trace ID is therefore already bound when the error handler above runs.
+@app.middleware("http")
+async def assign_trace_id(request: Request, call_next):
+    """Bind a trace ID for the lifetime of this request.
+
+    An inbound ``X-Trace-Id`` is accepted only if it matches a strict short-token
+    pattern; anything else is replaced with a fresh server-generated ID, because
+    this value is written to log files. It is a diagnostic label and is never
+    consulted for authorization.
+    """
+    token = set_trace_id(coerce_trace_id(request.headers.get(TRACE_HEADER)))
+    try:
+        response = await call_next(request)
+        response.headers[TRACE_HEADER] = get_trace_id() or ""
+        return response
+    finally:
+        # Reset even when the handler raised, so a reused worker task cannot
+        # carry this request's ID into the next one.
+        reset_trace_id(token)
 
 
 # ---------------------------------------------------------------------------

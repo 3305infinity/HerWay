@@ -33,7 +33,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from bson import ObjectId
+from backend.models.agent_envelope import AgentExecution
 from backend.models.case import Case, CaseStatus
+from backend.trace import get_trace_id, log_fields
 from backend.models.research import (
     ResourceVerification,
     SearchFailureReason,
@@ -378,7 +380,7 @@ class ChatAgent:
             f"User Question: {user_message}\n"
         )
 
-        # 2. Select & Run Tool
+        # 2. Select the tool
         tool_choice = await self._llm.structured_generate(
             system_prompt=system_prompt,
             user_prompt=context_prompt,
@@ -388,9 +390,83 @@ class ChatAgent:
         tool_name = tool_choice.tool_name
         args = tool_choice.arguments
 
-        logger.info("ChatAgent selected tool '%s' (mode=%s)", tool_name, mode)
+        # Tool name and mode only. The user's message, their location and the
+        # case contents must never reach the log.
+        logger.info(
+            "ChatAgent tool selected %s",
+            log_fields(tool=tool_name, mode=mode or "default", case_id=case.id),
+        )
 
-        # 3. Deterministic Tool Execution
+        # 3. Execute it, isolated.
+        #
+        # The dispatch below is wrapped rather than inlined so that one tool
+        # raising cannot take down the whole turn: a failed community lookup
+        # should not stop the user getting an answer, and an unexpected
+        # exception must never surface as a stack trace or an empty bubble.
+        execution = await AgentExecution.run(
+            f"chat_tool:{tool_name}",
+            lambda: self._execute_tool(
+                tool_name=tool_name,
+                args=args,
+                case=case,
+                context_prompt=context_prompt,
+                system_prompt=system_prompt,
+                db=db,
+                mode=mode,
+            ),
+            tool=tool_name,
+            mode=mode or "default",
+        )
+
+        logger.info(
+            "ChatAgent tool finished %s",
+            log_fields(
+                tool=tool_name,
+                status=execution.status.value,
+                duration_ms=execution.duration_ms,
+                error_reason=execution.error.reason if execution.error else None,
+            ),
+        )
+
+        if execution.ok and execution.result is not None:
+            result = dict(execution.result)
+            result.setdefault("trace_id", get_trace_id())
+            return result
+
+        # The tool raised. Say so plainly — never present a failure as a
+        # completed action, and never fall back to answering from memory.
+        return {
+            "reply": (
+                "I ran into a problem carrying that out, so I have stopped rather "
+                "than guess. Nothing you told me has been lost — please try again "
+                "in a moment.\n\n"
+                "If you need help right now: 112 for emergencies, 181 for the "
+                "women helpline."
+            ),
+            "tool_used": tool_name,
+            "degraded_notice": (
+                f"tool_failed: {execution.error.reason}" if execution.error else "tool_failed"
+            ),
+            "trace_id": get_trace_id(),
+        }
+
+    async def _execute_tool(
+        self,
+        *,
+        tool_name: str,
+        args: Dict[str, Any],
+        case: Case,
+        context_prompt: str,
+        system_prompt: str,
+        db: Any,
+        mode: Optional[str],
+    ) -> Dict[str, Any]:
+        """Deterministic dispatch for the selected tool.
+
+        Extracted from ``converse`` so the call can be timed, logged and
+        isolated. The dispatch logic itself is unchanged — each branch still
+        wraps an existing HerWay capability rather than reimplementing it.
+        """
         if tool_name == "search_web":
             parsed_args = ToolSearchWeb.model_validate(args)
             outcome = await self._serpapi.search_detailed(
@@ -712,7 +788,18 @@ class ChatAgent:
             # ── Reuse existing Haven RAG pipeline ──────────────────────────
             parsed_args = ToolInvokeLawbot.model_validate(args)
             embedding_svc = EmbeddingService()
+            # NOTE: `search_legal_docs` returns [] both when nothing matched and
+            # when retrieval is unavailable (missing Atlas index, embedding
+            # outage) — see docs/KNOWN_ISSUES.md B-02. Either way the branch
+            # below goes to live official sources instead of answering from the
+            # model's own memory, which is the behaviour that actually matters
+            # for a legal question: an invented section number is worse than no
+            # answer.
             docs = embedding_svc.search_legal_docs(query=parsed_args.question, top_k=3)
+            logger.info(
+                "ChatAgent lawbot retrieval %s",
+                log_fields(documents_found=len(docs), fell_back_to_search=not docs),
+            )
 
             if docs:
                 doc_context = "\n".join(
@@ -879,7 +966,27 @@ class ChatAgent:
             # ── Reuse existing Haven poem-generation pipeline ──────────────
             parsed_args = ToolGeneratePoem.model_validate(args)
             report_svc = ReportService()
-            poem = report_svc.generate_poem(parsed_args.context or case.situation_text[:200])
+            try:
+                poem = report_svc.generate_poem(
+                    parsed_args.context or case.situation_text[:200]
+                )
+            except Exception as exc:
+                # A comfort feature failing must not cost the user their turn.
+                logger.warning(
+                    "ChatAgent poem generation failed %s",
+                    log_fields(reason=type(exc).__name__),
+                )
+                poem = ""
+            if not (poem or "").strip():
+                return {
+                    "reply": (
+                        "I could not find the right words just now. That does not "
+                        "change what I think of you for reaching out. Is there "
+                        "something practical I can help with instead?"
+                    ),
+                    "tool_used": "generate_poem",
+                    "degraded_notice": "poem_generation_failed",
+                }
             return {
                 "reply": f"A few words for you:\n\n*{poem}*\n\nYou are not alone in this.",
                 "tool_used": "generate_poem",

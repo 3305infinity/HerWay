@@ -31,6 +31,7 @@ from backend.db import get_database
 from backend.models.case import Case
 from backend.services.llm_service import LLMService, LLMUnavailableError
 from backend.services.serpapi_service import SerpApiService
+from backend.trace import get_trace_id
 from backend.utils.common import serialize_object_id
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,11 @@ class ChatResponse(BaseModel):
     formal_report: Optional[str] = None
     #: Set when part of the answer could not be produced (e.g. search was down).
     degraded_notice: Optional[str] = None
+    #: Diagnostic identifier for this request, so a user can quote it when
+    #: reporting a problem and it can be found in the logs. Additive and
+    #: optional — existing clients that ignore it are unaffected. It is **not**
+    #: an authorization token and grants access to nothing.
+    trace_id: Optional[str] = None
 
 
 @router.post("", response_model=ChatResponse)
@@ -191,4 +197,5 @@ async def chat(request: ChatRequest, identity: Identity = Depends(get_identity))
         lawbot_docs=result.get("lawbot_docs", []) or [],
         formal_report=result.get("formal_report"),
         degraded_notice=result.get("degraded_notice"),
+        trace_id=result.get("trace_id") or get_trace_id(),
     )
