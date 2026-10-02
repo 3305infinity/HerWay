@@ -139,3 +139,11 @@ export function apiPatch<T>(path: string, body?: unknown, timeoutMs?: number) {
 export function apiUpload<T>(path: string, form: FormData, timeoutMs?: number) {
   return apiFetch<T>(path, { method: 'POST', body: form, timeoutMs });
 }
+
+/**
+ * Added for the Safety Center, where a user deleting a plan, a contact or their
+ * whole record is a first-class action rather than an edge case.
+ */
+export function apiDelete<T>(path: string, timeoutMs?: number) {
+  return apiFetch<T>(path, { method: 'DELETE', timeoutMs });
+}

@@ -10,7 +10,9 @@ Routing
   - ``backend.routes.research`` → /api/v2/research/...
   - ``backend.routes.chat``     → /api/v2/chat/...
   - ``backend.routes.discreet`` → /api/v2/discreet/...
+  - ``backend.routes.discover`` → /api/v2/discover/...
   - ``backend.routes.resources``→ /api/v2/resources/...
+  - ``backend.routes.safety_center`` → /api/v2/safety-center/...
 """
 
 import logging
@@ -47,9 +49,11 @@ from backend.trace import (
 from backend.routes.cases import router as cases_router
 from backend.routes.chat import router as chat_router
 from backend.routes.discreet import router as discreet_router
+from backend.routes.discover import router as discover_router
 from backend.routes.legacy import router as legacy_router
 from backend.routes.research import router as research_router
 from backend.routes.resources import router as resources_router
+from backend.routes.safety_center import router as safety_center_router
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -208,7 +212,9 @@ app.include_router(cases_router)
 app.include_router(research_router)
 app.include_router(chat_router)
 app.include_router(discreet_router)
+app.include_router(discover_router)
 app.include_router(resources_router)
+app.include_router(safety_center_router)
 
 
 # ---------------------------------------------------------------------------

@@ -34,6 +34,8 @@ function Navbar() {
     { href: '/cases', label: 'My Cases' },
     { href: '/lawbot', label: 'LawBot' },
     { href: '/therapybot', label: 'Talk to Niva' },
+    { href: '/safety-center', label: 'Safety Center' },
+    { href: '/discover', label: 'Find places' },
     { href: '/community', label: 'Community' },
     { href: '/discreet-message', label: 'Discreet message' },
   ];

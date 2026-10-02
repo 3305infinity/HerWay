@@ -76,6 +76,15 @@ class ChatResponse(BaseModel):
     #: optional — existing clients that ignore it are unaffected. It is **not**
     #: an authorization token and grants access to nothing.
     trace_id: Optional[str] = None
+    #: Phase 3 local intelligence. All optional and additive; a client that
+    #: ignores them behaves exactly as before.
+    #: Normalised listings from a local discovery search, with provenance and a
+    #: retrieval timestamp. Never implies a place is open or safe.
+    local_resources: Optional[Dict[str, Any]] = None
+    #: Structured profile of one named place, including review themes.
+    place_profile: Optional[Dict[str, Any]] = None
+    #: Side-by-side comparison table. Carries no overall ranking by design.
+    comparison: Optional[Dict[str, Any]] = None
 
 
 @router.post("", response_model=ChatResponse)
@@ -198,4 +207,7 @@ async def chat(request: ChatRequest, identity: Identity = Depends(get_identity))
         formal_report=result.get("formal_report"),
         degraded_notice=result.get("degraded_notice"),
         trace_id=result.get("trace_id") or get_trace_id(),
+        local_resources=result.get("local_resources"),
+        place_profile=result.get("place_profile"),
+        comparison=result.get("comparison"),
     )
