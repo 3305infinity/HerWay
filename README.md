@@ -69,6 +69,9 @@ These are enforced in code and asserted in tests, not aspirations.
 | **India-first** | `gl=in`, Indian statutes (PWDVA 2005, POSH Act 2013, BNS/IPC, IT Act), Indian helplines only, `.nic.in` recognised as government. Never assumes a city. |
 | **The server decides who you are** | Case ownership is resolved from a verified session, never from a client-supplied `user_id`. |
 | **Claims must be accurate** | Quick Exit is described as what it is — an immediate redirect that *cannot* erase browser history. See [`/privacy`](frontend/src/app/privacy/page.tsx). |
+| **No safety verdicts about places** | Search results cannot establish whether somewhere is safe. There is no safety-score field in the codebase, comparisons carry no ranking, and an absence of bad news is never read as evidence of safety. |
+| **Attempted is not completed** | Agent executions distinguish *proposed → attempted → completed*. A user is never told something was done when it was only tried. |
+| **Emergency guidance never depends on a provider** | Urgency detection and emergency steps are deterministic Python. They work with Gemini, SerpApi and the database all unavailable — which, during development, they often were. |
 
 ---
 
@@ -84,6 +87,8 @@ flowchart TB
         UI_Therapy["Niva, 3D companion (/therapybot)"]
         UI_Community["Community (/community, /post/[id])"]
         UI_Stego["Discreet message (/discreet-message)"]
+        UI_Safety["Safety Center (/safety-center)"]
+        UI_Discover["Find places (/discover)"]
         UI_Privacy["Privacy & limits (/privacy)"]
     end
 
@@ -231,7 +236,47 @@ on the server.
 > still sees you type it, and chat apps that re-compress photos destroy it —
 > send the file as a document attachment.
 
-### 7. Safety & privacy
+### 7. Safety Center (`/safety-center`)
+
+Plans a user writes and keeps, separate from the AI-generated crisis plan
+attached to a case. Several plans are supported ("getting home late", "when he
+is released"), each with steps, trusted contacts, a safe word and an optional
+review date.
+
+**AI suggestions are kept outside the plan until accepted.** A suggestion sits
+in a separate list and is shown as pending; accepting it moves it in and marks
+it `accepted_suggestion`. If the user rewords it, her wording is what the plan
+displays and the original is kept alongside for provenance.
+
+Also here: trusted contacts, check-ins, and a share-draft builder.
+
+> **Two things this deliberately does not do.**
+> **It does not monitor check-ins** — HerWay has no reliable background
+> execution, so "overdue" is computed when you look at it, nothing watches a
+> timer, and nobody is alerted. **It does not deliver messages** — no SMS or
+> WhatsApp provider is configured, so sharing opens *your* app with the text
+> pre-filled and reports `delivery_guarantee: "none"`.
+>
+> Saving someone as a trusted contact **does not tell them**, and they have not
+> agreed to anything.
+
+### 8. Find places (`/discover`)
+
+Everyday local discovery across 14 categories — hospitals, pharmacies, police,
+One Stop Centres, legal aid, transport, accommodation. Results carry their
+source, a retrieval timestamp and a provenance label; anything the provider did
+not publish is shown as missing rather than guessed.
+
+Side-by-side comparison is available, built only from fields the sources
+actually supplied.
+
+> **HerWay never says a place is safe.** Search results cannot establish that.
+> There is no safety score anywhere in the codebase, comparisons carry no
+> overall ranking, review sentiment is never converted into a verdict, and an
+> absence of negative news is never treated as evidence of safety. Ratings are
+> labelled as customer experience, not personal safety.
+
+### 9. Safety & privacy
 
 - **Quick Exit** — sticky button plus a global `ESC` listener, redirecting
   immediately. The tooltip and [`/privacy`](frontend/src/app/privacy/page.tsx)
@@ -286,12 +331,16 @@ Haven-main/
 │   │   └── source_verifier.py       # Authority scoring & contradiction detection
 │   ├── models/                      # Pydantic domain models
 │   │   ├── action_plan.py  case.py  research.py  safety_plan.py
+│   │   ├── agent_envelope.py        # proposed / attempted / completed
+│   │   └── safety_center.py         # Plans, contacts, check-ins, sharing
 │   ├── routes/
 │   │   ├── cases.py                 # /api/v2/cases/*
 │   │   ├── chat.py                  # /api/v2/chat
 │   │   ├── discreet.py              # /api/v2/discreet/*   (encode / decode)
 │   │   ├── research.py              # /api/v2/research/*
 │   │   ├── resources.py             # /api/v2/resources/*  (helplines, regions)
+│   │   ├── discover.py              # /api/v2/discover/*   (local intelligence)
+│   │   ├── safety_center.py         # /api/v2/safety-center/*
 │   │   └── legacy.py                # Original root endpoints
 │   ├── services/
 │   │   ├── embedding_service.py     # Atlas vector search wrapper
@@ -300,12 +349,20 @@ Haven-main/
 │   │   ├── report_service.py        # Formal reports & poems
 │   │   ├── research_orchestrator.py # Budget, routing, dedup, quality loop
 │   │   ├── serpapi_service.py       # SerpApi client + failure taxonomy
+│   │   ├── search_cache.py          # Shared cache: memory | sqlite | mongodb
+│   │   ├── resource_resolver.py     # Category + place -> normalised resources
+│   │   ├── place_research.py        # Place profiles, review themes, comparison
+│   │   ├── action_workflow.py       # do now / next / alternatives / save / share
+│   │   ├── safety_center_repository.py  # Owner-scoped persistence
 │   │   └── steganography_service.py
 │   ├── utils/                       # embedding · steganography · text_llm
 │   ├── auth.py                      # Clerk JWKS + anonymous session isolation
 │   ├── india_resources.py           # Attributed registry & source hierarchy
+│   ├── trace.py                     # Request-scoped trace IDs (contextvars)
+│   ├── safety_triage.py             # Deterministic urgency — no LLM needed
+│   ├── rate_limit.py                # Per-caller budgets (in-process)
 │   ├── db.py  logger.py  main.py  prompts.py  schema.py
-│   ├── tests/                       # 140 tests
+│   ├── tests/                       # 551 tests
 │   └── requirements.txt
 │
 ├── frontend/
@@ -318,6 +375,8 @@ Haven-main/
 │   │   │   ├── create-post/         # Share an experience
 │   │   │   ├── discreet-message/    # Encode / decode
 │   │   │   ├── lawbot/  therapybot/ post/[id]/  dashboard/
+│   │   │   ├── safety-center/       # Plans, contacts, check-ins
+│   │   │   ├── discover/            # Find and compare places
 │   │   │   ├── privacy/             # What this does and does not protect
 │   │   │   └── page.tsx             # Homepage & intake
 │   │   ├── components/
@@ -334,6 +393,14 @@ Haven-main/
 │   │       ├── server-auth.ts       # Server-side Clerk token
 │   │       └── types.ts
 │   └── public/models/avatar.glb
+│
+├── docs/
+│   ├── EXISTING_ARCHITECTURE_AUDIT.md   # What is verified, partial, broken, unverified
+│   ├── INTEGRATION_ROADMAP.md           # Phase-by-phase plan, per-file
+│   ├── KNOWN_ISSUES.md                  # Live issue register with priorities
+│   ├── PHASE2_IMPLEMENTATION_REPORT.md  # Tracing, research consolidation, legacy security
+│   ├── PHASE3_IMPLEMENTATION_REPORT.md  # Shared cache, local intelligence
+│   └── PHASE4_IMPLEMENTATION_REPORT.md  # Safety Center, contacts, check-ins
 │
 ├── .env.example                     # Every variable, with failure behaviour
 ├── ARCHITECTURE.md
@@ -376,6 +443,23 @@ MONGODB_URI=mongodb://localhost:27017   # without it: in-memory, data lost on re
 NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 ```
 
+### Search cache
+
+SerpApi bills per search, so results are cached. The backend is pluggable and
+**defaults to in-process**, which adds no infrastructure dependency:
+
+| `HERWAY_CACHE_BACKEND` | Sharing | Needs | Verified |
+|---|---|---|---|
+| `memory` *(default)* | none — per worker | nothing | — |
+| `sqlite` | across workers on **one host** | a writable file path | ✅ across two real processes |
+| `mongodb` | across hosts | the MongoDB you already run | ❌ unverified |
+
+TTLs differ by content type, because news decays and a street address does not:
+`CACHE_TTL_NEWS` 15 min · `CACHE_TTL_MAPS` 3 h · `CACHE_TTL_WEB` 1 h.
+
+An unavailable cache backend degrades to in-process with a warning — a cache
+outage never becomes a user-visible outage.
+
 ### Required in production
 
 | Variable | Why |
@@ -410,13 +494,38 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 
-# Run from the REPOSITORY ROOT — the app uses absolute `backend.*` imports
-cd ..
-uvicorn backend.main:app --reload --port 8000
+# Run from `backend/` — see the note below about which .env loads
+uvicorn main:app --reload --port 8000
 ```
 
 > Backend: `http://localhost:8000` · Swagger: `http://localhost:8000/docs`
 > · Health: `http://localhost:8000/health`
+
+#### ⚠️ Which directory you run from decides which `.env` loads
+
+`python-dotenv` searches upward from the **current working directory**, so:
+
+| Run from | Loads |
+|---|---|
+| `backend/` | `backend/.env` |
+| repository root | `.env` (repo root) |
+
+If both files exist, these are two different configurations and the app will
+silently use whichever one your shell happened to be sitting in. A root `.env`
+copied from `.env.example` has every key present but **empty**, which starts the
+backend with no Gemini and no SerpApi key — and the only symptom is features
+reporting an outage.
+
+**Keep your real keys in `backend/.env` and start from `backend/`**, or keep
+them in the root `.env` and start from the root with
+`uvicorn backend.main:app --reload --port 8000`. Either works; mixing them does
+not. `GET /health` tells you which integrations actually came up.
+
+> **Do not run two dev servers at once.** Next.js falls back to port 3001 when
+> 3000 is taken, but both instances write to the same `frontend/.next/`
+> directory and overwrite each other's compiled chunks. The symptom is
+> `ChunkLoadError: Loading chunk app/<route>/page failed`. Stop every instance,
+> delete `.next`, and start one.
 
 ### 2. Frontend
 
@@ -437,13 +546,20 @@ attaches the Clerk token server-side.
 ## 🧪 Testing
 
 ```bash
-# Backend — 140 tests, fully mocked, no API credit spent
+# Backend — 551 tests
 backend/.venv/Scripts/python.exe -m pytest backend/tests -q     # Windows
 python -m pytest backend/tests -q                               # macOS / Linux
 
 # Frontend
-cd frontend && npm run lint && npm run build
+cd frontend && npx tsc --noEmit && npm run lint && npm run build
 ```
+
+**Almost every test is offline.** The suite exercises code paths, contracts and
+failure handling — it does **not** demonstrate that Gemini, MongoDB or Atlas
+work. Treat a green run accordingly. Two exceptions genuinely touch real
+resources: the cross-process cache test spawns a second Python interpreter
+against a real SQLite file, and `test_safety_center.py` verifies ownership
+rules in-process.
 
 | Suite | Covers |
 |---|---|
@@ -455,10 +571,34 @@ cd frontend && npm run lint && npm run build
 | `test_source_verifier.py` | Authority scoring, agreement, contradictions |
 | `test_research_orchestrator.py` | Vertical routing, budget, dedup, degradation reporting |
 | `test_women_safety.py` | Category routing, India resources, no-confrontation mandate |
+| `test_trace.py` | Trace isolation across concurrent requests, hostile header rejection, cleanup after exceptions |
+| `test_research_consolidation.py` | `ResearchAgent` compatibility after consolidation; budget, dedup, PII scrubbing |
+| `test_safety_triage.py` | Conservative urgency, false-positive control, workflow routing |
+| `test_legacy_security.py` | Rate limits, input validation, which legacy routes stay public |
+| `test_agent_envelope.py` | attempted vs completed; failure isolation |
+| `test_chat_agent_phase2.py` | All 14 tools present; mode discriminator; honest degradation |
+| `test_search_cache.py` | Key normalization, TTLs, corrupt entries, cache outage, **real cross-process reuse** |
+| `test_local_intelligence.py` | Resolver triggers, normalization, review themes, news claims, comparisons |
+| `test_discover_routes.py` | Discovery endpoints, provider failure vs empty, rate limiting |
+| `test_safety_center.py` | Plan/contact/check-in lifecycle, **cross-user authorization**, sharing honesty |
+| `test_action_workflow.py` | Confrontation filter, proportionality, LLM-independent emergency guidance |
 
 ---
 
 ## 📡 API reference
+
+**62 endpoints.** Swagger at `http://localhost:8000/docs` is generated from the
+code and is always authoritative; the tables below are the curated subset.
+
+| Group | Count |
+|---|---|
+| `/api/v2/safety-center` | 22 |
+| `/api/v2/cases` | 11 |
+| `/api/v2/discover` | 5 |
+| `/api/v2/research` · `/api/v2/discreet` | 3 each |
+| `/api/v2/resources` | 2 |
+| `/api/v2/chat` | 1 |
+| Original Haven endpoints (root) | 15 |
 
 ### Cases — `/api/v2/cases`
 
@@ -495,8 +635,40 @@ cd frontend && npm run lint && npm run build
 | `GET` | `/api/v2/resources/regions` | Indian states and union territories |
 | `GET` | `/health` | Status, database mode, per-integration availability |
 
-**All case, research and chat endpoints verify ownership.** A case belonging to
-another account or session returns `403`.
+### Local discovery — `/api/v2/discover`
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v2/discover/categories` | Searchable categories. No search cost, not rate limited. |
+| `POST` | `/api/v2/discover/resources` | `{category, location}` ➔ normalised listings with provenance and a retrieval timestamp |
+| `POST` | `/api/v2/discover/place` | `{place_name, location?}` ➔ listing + review themes + limitations |
+| `POST` | `/api/v2/discover/compare` | `{category, location, priorities[]}` ➔ comparison table. **No overall ranking.** |
+| `POST` | `/api/v2/discover/area-reports` | Recent public reporting about an area, with claim types and inference limits |
+
+A failed lookup returns `success: false`; a lookup that worked and matched
+nothing returns `found_nothing: true`. These are never collapsed — "the search
+broke" and "there are no hospitals nearby" are different answers.
+
+### Safety Center — `/api/v2/safety-center`
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` `GET` | `/plans` | Create / list user-owned plans. Several plans are supported. |
+| `GET` `PATCH` `DELETE` | `/plans/{id}` | Read, edit, pause, archive, delete |
+| `POST` | `/plans/{id}/steps` · `PATCH` `DELETE` `/steps/{step_id}` | Steps the user wrote |
+| `POST` | `/plans/{id}/suggestions` | Record an AI suggestion — lands **outside** the plan until accepted |
+| `POST` | `/plans/{id}/suggestions/{id}/accept` | Accept, optionally rewording. The user's wording wins. |
+| `DELETE` | `/plans/{id}/suggestions/{id}` | Dismiss |
+| `POST` `GET` | `/contacts` · `PATCH` `DELETE` `/contacts/{id}` | Trusted contacts. Adding one **never notifies them**. |
+| `POST` `GET` | `/check-ins` · `GET` `/check-ins/active` | Start / list check-ins |
+| `PATCH` `DELETE` | `/check-ins/{id}` | Mark safe, cancel, delete |
+| `POST` | `/share-draft` | Prepare a message. Returns `delivery_guarantee: "none"`. |
+| `DELETE` | `/all-data` | Delete every Safety Center record for the caller |
+
+**All case, research, chat, discovery and Safety Center endpoints verify
+ownership.** A case belonging to another session returns `403`; a Safety Center
+record returns `404`, because confirming that someone else's safety plan exists
+is itself a disclosure.
 
 ### Original endpoints (root mount)
 
@@ -513,7 +685,19 @@ another account or session returns `403`.
 | `POST` | `/upload_embeddings/` | Index legal documents — **requires sign-in** |
 | `POST` | `/generate-image` | Image generation via AWS Bedrock + S3 (503 when AWS is unset) |
 | `POST` | `/img-generation` | Legacy image-prompt stub |
-| `POST` | `/send-message` | Legacy Twitter share |
+| `POST` | `/send-message` | Twitter share — **requires sign-in** |
+
+These fourteen were classified rather than blanket-protected. The community
+feed stays open on purpose: a woman reading other women's experiences, or
+posting her own, should not have to create an account first. The risk those
+routes actually carry is cost and volume, so each has a per-caller request
+budget instead of a login wall — 20 paid-provider calls / 5 min, 10 submissions
+/ 5 min, 120 reads / min. The policy table lives at the top of
+[`backend/routes/legacy.py`](backend/routes/legacy.py).
+
+Nothing carrying emergency information is rate limited: `/health` and
+`/api/v2/resources/*` are exempt, because a limiter must never be the reason
+someone cannot reach 112.
 
 ---
 
@@ -567,24 +751,85 @@ rejects.
 > Next.js reads `.env.local` at startup only — restart the dev server after
 > editing it.
 
+**`ChunkLoadError: Loading chunk app/<route>/page failed`**
+
+Two processes are writing to `frontend/.next/` at once. Either two dev servers
+are running (Next falls back to port 3001 when 3000 is taken, and both share the
+same build directory), or `npm run build` ran while `npm run dev` was live — the
+production build replaces the dev chunks the running server is still serving.
+
+Stop every Node process, delete `.next`, start one server, and hard-reload the
+browser (`Ctrl+Shift+R`) to drop the cached broken chunk.
+
+**`[WinError 10013] An attempt was made to access a socket…`**
+
+On Windows this usually means the port is already in use, not a permissions
+problem. Find and stop the holder:
+
+```powershell
+netstat -ano | findstr :8000
+taskkill /PID <pid> /F
+```
+
+**Features report an outage even though your keys are set**
+
+You are almost certainly loading the wrong `.env` — see the warning in
+[Quick start](#1-backend). Check `GET /health`: it reports which integrations
+actually came up, and `"database": "in-memory"` means MongoDB is not connected
+and **data will be lost on restart**.
+
 ---
 
 ## ⚠️ Known limitations
 
-See [**VALIDATION_REPORT.md**](VALIDATION_REPORT.md) for the full feature
-health matrix. The main ones:
+Full detail in [`docs/`](docs/) — the architecture audit, the per-phase reports
+and [`KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). The ones that matter most:
 
-- **LawBot RAG** needs a MongoDB Atlas `$vectorSearch` index named
-  `culpritIndex2` over `doc_embedding`. Without it LawBot falls back to live
-  web search.
-- **Community post images** require AWS Bedrock + S3.
-- **Gemini free tier** is ~20 requests/day; one full case uses 5–8.
-- **Safety plan quality** has not been reviewed by a DV professional. Prompts
+**Unverified infrastructure.** These are not known-broken; they are *unproven*,
+because the environment this was built in could not reach them:
+
+- **MongoDB persistence has never been verified.** All development ran on the
+  in-memory fallback, where **data is lost on restart**. Safety plans, trusted
+  contacts and check-ins inherit this. `GET /health` reports
+  `"database": "in-memory"` when you are in that mode. Production refuses the
+  fallback outright, but a real create → restart → reload cycle has not been
+  performed.
+- **Clerk sign-in is unverified.** The anonymous path works and is tested; the
+  authenticated path is only tested for its rejection cases. With Clerk
+  unconfigured, Safety Center records key to a browser session — **clearing
+  cookies loses them**.
+- **No live LLM validation.** The Gemini free tier is ~20 requests/day and was
+  exhausted throughout development, so no LLM-backed output has been checked
+  against a real model response.
+- **Cross-host cache sharing is unverified.** The SQLite backend is proven
+  across processes; the MongoDB backend is contract-tested only.
+
+**Known broken:**
+
+- **LawBot retrieval.** Three separate faults: the embedding model was retired
+  (fixed), the vector field path was wrong (fixed), and documents are stored as
+  pickled binary, which Atlas `$vectorSearch` cannot index (**not fixed** —
+  needs re-ingestion). LawBot falls back to live official-source search rather
+  than answering from model memory.
+
+**Accepted constraints:**
+
+- **Rate limiting is per-process.** With N workers a caller effectively gets N×
+  the budget, and it resets on restart. It stops casual abuse; it is not a
+  defence against a distributed attacker, and a real edge/WAF limit is still
+  needed.
+- **No message delivery.** No SMS or WhatsApp provider is configured, by
+  choice — adding a paid one to make the UI look complete would have meant
+  shipping a delivery promise that could not be kept.
+- **No background scheduling**, so no server-side check-in reminders.
+- **No encryption-at-rest claim.** Nothing in this repository configures it.
+- **Safety plan quality has not been reviewed by a DV professional.** Prompts
   enforce structure and the no-confrontation mandate, but expert review is
   needed before real-world use.
-- **No rate limiting** on HerWay's own endpoints yet.
-- `google-generativeai` is deprecated upstream; migration to `google-genai`
-  is pending.
+- **No CI.** 551 tests, nothing runs them automatically.
+- **No automated frontend tests** — there is no test runner in the frontend.
+- `google-generativeai` is deprecated upstream; migration to `google-genai` is
+  pending. Two model retirements have already broken this app.
 
 ---
 
