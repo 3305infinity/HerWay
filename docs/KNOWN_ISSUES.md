@@ -79,7 +79,7 @@ the actionable register.
 | C-02 | No Atlas vector indexes — `culpritIndex2` (community) and a legal-document index (B-01) | **P0** | 2 |
 | C-03 | Gemini free-tier quota exhausted (~20 req/day; one full case uses 5–8), blocking all live LLM verification | **P0** | 7 |
 | C-04 | No Clerk project | P1 | 7 |
-| C-05 | **No CI.** Nothing runs the 140 tests automatically. | P1 | 7 |
+| C-05 | **No CI.** Nothing runs the 551 tests automatically. | P1 | 7 |
 | C-06 | No deployment config — no Dockerfile, compose, or platform manifest | P1 | 7 |
 | C-07 | No `LICENSE` file, though README and badge claim MIT | P2 | 7 |
 | C-08 | 13 env vars were undocumented | P2 | 1 | **Fixed** — added to `.env.example` |

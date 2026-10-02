@@ -124,7 +124,8 @@ Cross-host sharing is unverified.
 `ResourceResolver.resolve()` → `SerpApiService.search_detailed()` *(cached)* →
 normalise → `ResolutionOutcome`.
 
-15 categories, each with a query template tuned for Indian listings (One Stop
+14 user-facing categories (plus an internal `other` fallback), each with a
+query template tuned for Indian listings (One Stop
 Centre, Mahila Thana, DLSA, Swadhar Greh). The category set is closed, so no
 unvalidated user text becomes a provider query.
 
