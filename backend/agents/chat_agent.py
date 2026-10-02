@@ -156,6 +156,39 @@ class ToolGeneratePoem(BaseModel):
     reason: str = Field(..., description="Why an empowering poem is appropriate now")
 
 
+# ---- Phase 3: local intelligence -------------------------------------------
+# Added alongside the existing search tools rather than replacing them.
+# `search_local` and `search_safety_resources` keep their current behaviour;
+# these two cover the everyday discovery cases they handled poorly: researching
+# one named place, and weighing a few options against each other.
+
+
+class ToolResearchPlace(BaseModel):
+    place_name: str = Field(..., description="The specific place to look up, e.g. 'Ruby Hall Clinic'")
+    location: Optional[str] = Field(None, description="City or area, if the user gave one")
+    reason: str = Field(..., description="Why this place needs researching")
+
+
+class ToolComparePlaces(BaseModel):
+    category: str = Field(
+        ...,
+        description=(
+            "What kind of place to compare: hospital, clinic, pharmacy, police, "
+            "women_police, one_stop_centre, shelter, legal_aid, transport_hub, "
+            "public_transport, atm, public_place, accommodation, counselling"
+        ),
+    )
+    location: Optional[str] = Field(None, description="City, locality or district")
+    priorities: List[str] = Field(
+        default_factory=list,
+        description=(
+            "What the USER said matters to them, e.g. ['rating', 'phone']. "
+            "Only include what they actually stated — never assume priorities."
+        ),
+    )
+    reason: str = Field(..., description="Why a comparison helps here")
+
+
 class ToolCallChoice(BaseModel):
     tool_name: str = Field(
         ...,
@@ -163,7 +196,7 @@ class ToolCallChoice(BaseModel):
             "answer_user | search_web | search_news | search_local | "
             "update_action_status | adapt_safety_plan | search_safety_resources | "
             "invoke_lawbot | search_community | encode_message | "
-            "generate_formal_report | generate_poem"
+            "generate_formal_report | generate_poem | research_place | compare_places"
         ),
     )
     arguments: Dict[str, Any] = Field(default_factory=dict)
@@ -223,6 +256,23 @@ HAVEN CAPABILITIES (integrated as tools):
    - FORMAL REPORT (`generate_formal_report`): when the user wants a written
      report for police, NCW, or a POSH Internal Committee.
    - ENCOURAGEMENT (`generate_poem`): only if the user asks for encouragement.
+
+LOCAL DISCOVERY (use sparingly — each one costs a live search):
+   - ONE NAMED PLACE (`research_place`): the user names a specific place and
+     wants to know about it. Not for "find me a hospital" — that is a search.
+   - SEVERAL OPTIONS (`compare_places`): the user is weighing options of one
+     category in one area. Pass `priorities` ONLY if the user said what matters
+     to them; never invent priorities on their behalf.
+   - Prefer `search_safety_resources` when the need is support services during
+     a safety situation; prefer `compare_places` for everyday choices.
+   - Do NOT use either for writing requests, emotional support, legal
+     questions, or anything that is not about finding or choosing a place.
+   - A location is required. Never guess one, and never ask for precise GPS
+     coordinates — a city or locality name is enough.
+
+NEVER claim a place or route is safe or unsafe. Search results cannot establish
+that. Report what sources say, note what is missing, and leave the judgement to
+the user. Ratings describe customer experience, not personal safety.
 
 Respond with JSON matching the ToolCallChoice schema.
 """
@@ -869,6 +919,157 @@ class ChatAgent:
                     "searched_query": parsed_args.question,
                     "tool_used": "invoke_lawbot",
                 }
+
+        elif tool_name == "research_place":
+            # ── Phase 3: look up one named place ───────────────────────────
+            parsed_args = ToolResearchPlace.model_validate(args)
+            location = parsed_args.location or case.location_context or (
+                case.situation.location if case.situation else None
+            )
+            from backend.services.place_research import PlaceResearchService
+
+            profile = await PlaceResearchService(self._serpapi).research_place(
+                parsed_args.place_name, location, case_id=case.id
+            )
+
+            if not profile.success:
+                return {
+                    "reply": (
+                        f"I could not look up {parsed_args.place_name} just now — the "
+                        f"search did not complete. I would rather tell you that than "
+                        f"describe a place I have not actually found.\n\n"
+                        f"Please try again in a moment."
+                    ),
+                    "tool_used": "research_place",
+                    "degraded_notice": f"place_lookup_failed: {profile.failure_reason}",
+                }
+
+            if not profile.listing:
+                return {
+                    "reply": (
+                        f"I did not find a listing for \"{parsed_args.place_name}\""
+                        + (f" near {location}" if location else "")
+                        + ". It may be listed under a different name, or not listed "
+                        "at all. Could you check the spelling, or give me the area?"
+                    ),
+                    "tool_used": "research_place",
+                    "place_profile": profile.to_dict(),
+                }
+
+            listing = profile.listing
+            lines = [f"**{listing.get('name') or parsed_args.place_name}**"]
+            if listing.get("address"):
+                lines.append(f"  {listing['address']}")
+            if listing.get("phone"):
+                lines.append(f"  Phone: {listing['phone']}")
+            else:
+                lines.append("  (No phone number published in the listing.)")
+            if listing.get("rating") is not None:
+                lines.append(
+                    f"  Rating: {listing['rating']}"
+                    + (f" from {listing['review_count']} reviews" if listing.get("review_count") else "")
+                )
+
+            themes = (profile.reviews.themes if profile.reviews else [])[:4]
+            if themes:
+                lines.append("\n**What reviewers keep mentioning:**")
+                for theme in themes:
+                    lines.append(
+                        f"  · {theme.theme.replace('_', ' ')} — {theme.mention_count} mention(s)"
+                    )
+
+            return {
+                "reply": (
+                    "\n".join(lines)
+                    + "\n\nThis comes from public listings and reviews. It does not "
+                    "confirm the place is open or operating, and it is not a judgement "
+                    "about whether it is safe for you. Please call before travelling."
+                ),
+                "sources": profile.sources,
+                "tool_used": "research_place",
+                "place_profile": profile.to_dict(),
+            }
+
+        elif tool_name == "compare_places":
+            # ── Phase 3: evidence-aware comparison ─────────────────────────
+            parsed_args = ToolComparePlaces.model_validate(args)
+            location = parsed_args.location or case.location_context or (
+                case.situation.location if case.situation else None
+            )
+            if not location:
+                return {
+                    "reply": (
+                        "Tell me which city or area to look in and I will compare "
+                        "the options there. I will not guess a location."
+                    ),
+                    "tool_used": "compare_places",
+                }
+
+            from backend.services.place_research import compare_options
+            from backend.services.resource_resolver import (
+                ResourceCategory,
+                ResourceResolver,
+            )
+
+            try:
+                category = ResourceCategory(parsed_args.category.strip().lower())
+            except ValueError:
+                category = ResourceCategory.OTHER
+
+            outcome = await ResourceResolver(self._serpapi).resolve(
+                category, location, case_id=case.id
+            )
+
+            if not outcome.success:
+                return {
+                    "reply": (
+                        "I could not search for those options just now, so I have "
+                        "nothing to compare. This is a problem on my side, not a "
+                        "sign that there is nothing near you.\n\n"
+                        "If you need help immediately: 112, or 181 for the women helpline."
+                    ),
+                    "tool_used": "compare_places",
+                    "degraded_notice": f"comparison_search_failed: {outcome.failure_reason}",
+                }
+
+            if outcome.found_nothing:
+                return {
+                    "reply": (
+                        f"I searched near {location} and did not find listings to "
+                        f"compare. The women helpline on 181 can refer you to local "
+                        f"services, and 112 reaches police anywhere in India."
+                    ),
+                    "tool_used": "compare_places",
+                    "local_resources": outcome.to_dict(),
+                }
+
+            comparison = compare_options(
+                [r.to_dict() for r in outcome.resources],
+                priorities=parsed_args.priorities,
+            )
+
+            lines = [f"Here is how {len(outcome.resources)} options near {location} compare:\n"]
+            for name in comparison.option_names:
+                lines.append(f"**{name}**")
+                for fname in comparison.fields_compared[:4]:
+                    cell = comparison.table.get(fname, {}).get(name)
+                    if cell and cell.available:
+                        lines.append(f"  · {fname.replace('_', ' ')}: {cell.value}")
+                    else:
+                        lines.append(f"  · {fname.replace('_', ' ')}: not published")
+                lines.append("")
+
+            return {
+                "reply": (
+                    "\n".join(lines)
+                    + "\nI have not ranked these. Which one suits you depends on what "
+                    "matters to you and on local knowledge these listings do not have. "
+                    "Ratings reflect general customer experience, not personal safety."
+                ),
+                "tool_used": "compare_places",
+                "local_resources": outcome.to_dict(),
+                "comparison": comparison.to_dict(),
+            }
 
         elif tool_name == "search_community":
             # ── Reuse existing Haven community embedding search ─────────────

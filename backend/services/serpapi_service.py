@@ -42,6 +42,7 @@ from backend.models.research import (
     SearchResult,
     SearchVertical,
 )
+from backend.services.search_cache import SerpApiCache  # noqa: F401  (re-export)
 from backend.trace import log_fields
 
 load_dotenv()
@@ -112,67 +113,13 @@ def _as_int(value: Any) -> Optional[int]:
         return None
 
 
-class SerpApiCache:
-    """In-memory cache for identical search requests to prevent credit wastage."""
-
-    def __init__(self, ttl_seconds: int = 3600) -> None:
-        self._cache: Dict[str, tuple[float, List[SearchResult]]] = {}
-        self._ttl_seconds = ttl_seconds
-
-    def _make_key(
-        self,
-        query: str,
-        vertical: str,
-        location: Optional[str],
-        country: Optional[str],
-        language: Optional[str],
-        page: int,
-    ) -> str:
-        # Collapse runs of whitespace so "women  helpline" and "women helpline"
-        # share a cache entry instead of burning two SerpApi credits.
-        clean_q = " ".join((query or "").lower().split())
-        clean_v = (vertical or "web").strip().lower()
-        clean_loc = " ".join((location or "").lower().split())
-        clean_gl = (country or DEFAULT_COUNTRY).strip().lower()
-        clean_hl = (language or DEFAULT_LANGUAGE).strip().lower()
-        return f"{clean_v}:{clean_q}:{clean_loc}:{clean_gl}:{clean_hl}:{page}"
-
-    def get(
-        self,
-        query: str,
-        vertical: str,
-        location: Optional[str],
-        country: Optional[str],
-        language: Optional[str],
-        page: int = 1,
-    ) -> Optional[List[SearchResult]]:
-        key = self._make_key(query, vertical, location, country, language, page)
-        if key in self._cache:
-            timestamp, results = self._cache[key]
-            if time.time() - timestamp < self._ttl_seconds:
-                # The cache key embeds the query text, which derives from the
-                # user's situation. Record the hit, not the content.
-                logger.info(
-                    "SerpApiCache: HIT %s",
-                    log_fields(vertical=vertical, cached_results=len(results)),
-                )
-                return results
-            else:
-                del self._cache[key]
-        return None
-
-    def set(
-        self,
-        query: str,
-        vertical: str,
-        location: Optional[str],
-        country: Optional[str],
-        language: Optional[str],
-        page: int,
-        results: List[SearchResult],
-    ) -> None:
-        key = self._make_key(query, vertical, location, country, language, page)
-        self._cache[key] = (time.time(), results)
+# ``SerpApiCache`` now lives in ``backend.services.search_cache`` so it can be
+# shared across worker processes. It is re-exported here unchanged: this module
+# was its original home and existing imports and tests refer to it by this path.
+#
+# The ``get``/``set`` signatures are identical to the in-memory version this
+# replaced; only the storage behind them changed. See search_cache.py for the
+# backend choices and their operational requirements.
 
 
 class SerpApiService:
