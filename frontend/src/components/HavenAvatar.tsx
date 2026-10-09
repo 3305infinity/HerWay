@@ -10,6 +10,42 @@ interface HavenAvatarProps {
   className?: string;
 }
 
+
+/**
+ * Morph-target name resolution.
+ *
+ * Different pipelines spell the same expression differently. These are the
+ * spellings seen across ARKit/ReadyPlayerMe-style exports, VRoid/VRM, Blender
+ * shape keys and common marketplace rigs. Matching is case-insensitive and
+ * falls back to a substring scan, because exporters frequently prefix names
+ * (`CTRL_expressions_jawOpen`, `Fcl_MTH_A`).
+ */
+const MORPH_ALIASES: Record<string, string[]> = {
+  blinkLeft: ['eyeBlinkLeft', 'eyeBlink_L', 'blink_l', 'blinkLeft', 'Blink_L', 'Fcl_EYE_Close_L', 'eyesClosedL'],
+  blinkRight: ['eyeBlinkRight', 'eyeBlink_R', 'blink_r', 'blinkRight', 'Blink_R', 'Fcl_EYE_Close_R', 'eyesClosedR'],
+  blinkBoth: ['blink', 'eyesClosed', 'Fcl_EYE_Close', 'eye_close'],
+  jawOpen: ['jawOpen', 'mouthOpen', 'viseme_AA', 'A', 'aa', 'Fcl_MTH_A', 'mouth_open', 'JawOpen'],
+  smileLeft: ['mouthSmileLeft', 'mouthSmile_L', 'smile_l', 'Fcl_MTH_Joy'],
+  smileRight: ['mouthSmileRight', 'mouthSmile_R', 'smile_r'],
+};
+
+/** Index of the first alias this model actually has, or undefined. */
+function resolveMorph(
+  dict: Record<string, number>,
+  aliases: string[],
+): number | undefined {
+  const keys = Object.keys(dict);
+  for (const alias of aliases) {
+    const exact = keys.find((k) => k.toLowerCase() === alias.toLowerCase());
+    if (exact !== undefined) return dict[exact];
+  }
+  for (const alias of aliases) {
+    const partial = keys.find((k) => k.toLowerCase().includes(alias.toLowerCase()));
+    if (partial !== undefined) return dict[partial];
+  }
+  return undefined;
+}
+
 export default function HavenAvatar({
   isSpeaking = false,
   className = '',
@@ -22,6 +58,12 @@ export default function HavenAvatar({
   const modelRef = useRef<THREE.Group | null>(null);
   const headRef = useRef<THREE.Object3D | null>(null);
   const morphMeshRef = useRef<THREE.SkinnedMesh | null>(null);
+  //: Resolved per model — see MORPH_ALIASES. Any entry may be undefined,
+  //: in which case the animation loop substitutes procedural motion.
+  const morphIndexRef = useRef<Record<string, number | undefined>>({});
+  //: Measured from the model's bounding box so the contact shadow lands on
+  //: its feet rather than on an assumed y = 0.
+  const groundYRef = useRef<number>(0);
   //: PMREM generator and its render target, so both can be released on unmount.
   //: Leaking a render target between remounts shows up as a slow GPU-memory
   //: climb every time the user navigates back to this page.
@@ -139,12 +181,95 @@ export default function HavenAvatar({
         // Position model centered on shoulders and face
         model.position.set(0, 0, 0);
         model.scale.set(1, 1, 1);
+
+        // Frame the head from the model's actual geometry.
+        //
+        // The camera used to be hardcoded at (0, 1.46, 1.72) looking at
+        // y = 1.4 — numbers that only work if a model happens to be a
+        // 1.7m-tall figure standing at the origin. Anything else and the
+        // camera points at empty space above the head, which is exactly what
+        // happened: all you could see was the crown of a head pushing into
+        // frame from below.
+        //
+        // Measuring instead of guessing means any GLB frames correctly —
+        // tall, short, bust-only, or offset from the origin.
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+
+        if (size.y > 0) {
+          // Is this a full figure or already a bust?
+          //
+          // A standing person is roughly 3.5–4x taller than wide. A head-and-
+          // shoulders model is closer to 1.5x. Framing the top third is right
+          // for the first and badly wrong for the second — on a bust it crops
+          // to eyes-and-mouth, which is what happened here.
+          const widest = Math.max(size.x, size.z);
+          const aspect = widest > 0 ? size.y / widest : 1;
+          const isFullFigure = aspect > 2.2;
+
+          // What to put in frame, and where to centre it.
+          const framedHeight = isFullFigure
+            ? size.y * 0.33 // top third of a standing figure
+            : size.y * 0.92; // nearly all of a bust, with a little air
+          const focusY = isFullFigure
+            ? box.max.y - size.y * 0.16 // head-and-shoulders near the top
+            : center.y + size.y * 0.04; // the bust's own centre, nudged up
+
+          const fovRadians = (camera.fov * Math.PI) / 180;
+          const distance = (framedHeight / 2 / Math.tan(fovRadians / 2)) * 1.25;
+
+          camera.position.set(center.x, focusY, box.max.z + distance);
+          camera.lookAt(center.x, focusY, center.z);
+          camera.updateProjectionMatrix();
+
+          console.info(
+            `[Niva] model ${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
+              `(aspect ${aspect.toFixed(2)}) → framed as ${isFullFigure ? 'full figure' : 'bust'}`,
+          );
+
+          const eyeLine = focusY;
+
+          // Keep the key light relative to the subject rather than the origin,
+          // so a model standing off-centre is still lit from the front-left.
+          keyLight.position.set(center.x + distance * 0.7, eyeLine + size.y * 0.4, box.max.z + distance);
+          keyLight.target.position.set(center.x, eyeLine, center.z);
+          scene.add(keyLight.target);
+
+          // Ground the contact shadow on the model's actual base.
+          groundYRef.current = box.min.y;
+        }
         scene.add(model);
 
         // Find head bone or mesh with morph targets, and tune materials.
+        //
+        // Morph target names are NOT standardised. The ARKit set this code was
+        // written against (`jawOpen`, `eyeBlinkLeft`, `viseme_AA`) comes from
+        // one family of exporters; a model from Blender, VRoid, Mixamo or a
+        // marketplace will commonly use `Blink`, `A`, `mouth_open`, `Fcl_MTH_A`
+        // or nothing at all. Matching only the ARKit spelling meant any other
+        // model loaded and then sat completely frozen — alive-looking enough to
+        // be unsettling, which is the worst outcome on this page.
+        //
+        // So: resolve each expression to whatever this model actually has, and
+        // record what is missing so the animation loop can substitute
+        // procedural head motion instead of doing nothing.
         model.traverse((child) => {
           if (child instanceof THREE.SkinnedMesh && child.morphTargetDictionary) {
             morphMeshRef.current = child;
+            const dict = child.morphTargetDictionary as Record<string, number>;
+            morphIndexRef.current = Object.fromEntries(
+              Object.entries(MORPH_ALIASES).map(([key, aliases]) => [
+                key,
+                resolveMorph(dict, aliases),
+              ]),
+            );
+            const found = Object.entries(morphIndexRef.current)
+              .filter(([, v]) => v !== undefined)
+              .map(([k]) => k);
+            console.info(
+              `[Niva] model expressions available: ${found.join(', ') || 'none — using procedural motion'}`,
+            );
           }
           if (child.name.toLowerCase().includes('head')) {
             headRef.current = child;
@@ -195,7 +320,7 @@ export default function HavenAvatar({
           new THREE.ShadowMaterial({ opacity: 0.22 }),
         );
         shadowCatcher.rotation.x = -Math.PI / 2;
-        shadowCatcher.position.y = 0.001;
+        shadowCatcher.position.y = groundYRef.current + 0.001;
         shadowCatcher.receiveShadow = true;
         scene.add(shadowCatcher);
 
@@ -249,47 +374,70 @@ export default function HavenAvatar({
 
       // Morph target visemes & blinking
       const mesh = morphMeshRef.current;
-      if (mesh && mesh.morphTargetDictionary && mesh.morphTargetInfluences) {
-        const dict = mesh.morphTargetDictionary;
-        const inf = mesh.morphTargetInfluences;
+      const morph = morphIndexRef.current;
+      const inf = mesh?.morphTargetInfluences;
 
-        // Blinking
-        blinkTimer += delta;
-        if (blinkTimer > 3.5) {
-          isBlinking = true;
-          blinkTimer = 0;
-          blinkProgress = 0;
-        }
+      /** Set an expression if this model has it. Returns whether it did. */
+      const setMorph = (key: string, value: number): boolean => {
+        const index = morph[key];
+        if (index === undefined || !inf) return false;
+        inf[index] = value;
+        return true;
+      };
 
-        if (isBlinking) {
-          blinkProgress += delta * 7;
-          const blinkVal = Math.sin(blinkProgress * Math.PI);
-          if (dict['eyeBlinkLeft'] !== undefined) inf[dict['eyeBlinkLeft']] = Math.max(0, blinkVal);
-          if (dict['eyeBlinkRight'] !== undefined) inf[dict['eyeBlinkRight']] = Math.max(0, blinkVal);
-          if (blinkProgress >= 1) {
-            isBlinking = false;
-            if (dict['eyeBlinkLeft'] !== undefined) inf[dict['eyeBlinkLeft']] = 0;
-            if (dict['eyeBlinkRight'] !== undefined) inf[dict['eyeBlinkRight']] = 0;
-          }
-        }
-
-        // Talking mouth movement (visemes)
-        if (isSpeakingRef.current) {
-          const mouthOpen = Math.abs(Math.sin(time * 11)) * 0.65 + Math.abs(Math.sin(time * 7)) * 0.25;
-          if (dict['jawOpen'] !== undefined) inf[dict['jawOpen']] = mouthOpen;
-          if (dict['viseme_AA'] !== undefined) inf[dict['viseme_AA']] = mouthOpen * 0.8;
-          if (dict['mouthOpen'] !== undefined) inf[dict['mouthOpen']] = mouthOpen * 0.5;
-        } else {
-          // Relax mouth smoothly
-          if (dict['jawOpen'] !== undefined) inf[dict['jawOpen']] *= 0.8;
-          if (dict['viseme_AA'] !== undefined) inf[dict['viseme_AA']] *= 0.8;
-          if (dict['mouthOpen'] !== undefined) inf[dict['mouthOpen']] *= 0.8;
-        }
-
-        // Calming slight smile
-        if (dict['mouthSmileLeft'] !== undefined) inf[dict['mouthSmileLeft']] = 0.22;
-        if (dict['mouthSmileRight'] !== undefined) inf[dict['mouthSmileRight']] = 0.22;
+      // ---- Blinking ----------------------------------------------------
+      blinkTimer += delta;
+      if (blinkTimer > 3.5) {
+        isBlinking = true;
+        blinkTimer = 0;
+        blinkProgress = 0;
       }
+
+      if (isBlinking) {
+        blinkProgress += delta * 7;
+        const blinkVal = Math.max(0, Math.sin(blinkProgress * Math.PI));
+        // Per-eye where available, otherwise a single combined blink shape.
+        const blinked =
+          [setMorph('blinkLeft', blinkVal), setMorph('blinkRight', blinkVal)].some(Boolean) ||
+          setMorph('blinkBoth', blinkVal);
+
+        if (!blinked && headRef.current) {
+          // No blink shape at all. Rather than freeze, give the head a small
+          // downward nod on the same rhythm — it reads as a glance down and
+          // keeps the model feeling inhabited.
+          headRef.current.rotation.x += Math.sin(blinkProgress * Math.PI) * 0.004;
+        }
+
+        if (blinkProgress >= 1) {
+          isBlinking = false;
+          setMorph('blinkLeft', 0);
+          setMorph('blinkRight', 0);
+          setMorph('blinkBoth', 0);
+        }
+      }
+
+      // ---- Speaking ----------------------------------------------------
+      if (isSpeakingRef.current) {
+        const mouthOpen =
+          Math.abs(Math.sin(time * 11)) * 0.65 + Math.abs(Math.sin(time * 7)) * 0.25;
+        const spoke = setMorph('jawOpen', mouthOpen);
+
+        if (!spoke && headRef.current) {
+          // No jaw shape: suggest speech with a faint head movement instead of
+          // a motionless face, which looks broken while text is arriving.
+          headRef.current.rotation.z = Math.sin(time * 9) * 0.012;
+        }
+      } else {
+        const index = morph['jawOpen'];
+        if (index !== undefined && inf) inf[index] *= 0.8;
+        if (headRef.current) headRef.current.rotation.z *= 0.9;
+      }
+
+      // ---- Resting expression ------------------------------------------
+      // A faint lift, not a smile — see NivaPortrait's removal note: on this
+      // page a cheerful face is the wrong thing to meet someone with.
+      setMorph('smileLeft', 0.22);
+      setMorph('smileRight', 0.22);
 
       renderer.render(scene, camera);
     };
@@ -352,41 +500,49 @@ export default function HavenAvatar({
         className="pointer-events-none absolute inset-0 z-20 bg-[radial-gradient(ellipse_at_center,transparent_55%,rgba(60,40,55,0.16)_100%)]"
       />
 
-      {/* Loading or Fallback Companion */}
-      {loadStatus !== 'loaded' && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center space-y-4 p-6 text-center">
-          <div className="relative">
-            {/* Breathing halo. Gives the placeholder a sense of presence while
-                the 2.9 MB model downloads, instead of a static disc. */}
-            <div
-              aria-hidden
-              className="absolute -inset-4 rounded-full bg-primary/15 blur-xl motion-safe:animate-pulse"
-            />
-            <div className={`relative flex h-32 w-32 items-center justify-center rounded-full border-2 border-primary/40 bg-gradient-to-tr from-primary/30 to-purple-400/30 shadow-inner transition-transform duration-700 ${
-              isSpeaking ? 'scale-105' : 'scale-100'
-            }`}>
-              <span className="select-none text-4xl" role="img" aria-label="Niva Support Companion">
-                🕊️
-              </span>
-            </div>
-            {isSpeaking && (
-              <span className="absolute -top-1 -right-1 flex h-4 w-4">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-                <span className="relative inline-flex rounded-full h-4 w-4 bg-primary" />
-              </span>
-            )}
-          </div>
+      {/* Placeholder while the 3D model loads, and the permanent state on
+          devices without WebGL.
 
-          <div className="space-y-1">
-            <h3 className="text-base font-semibold text-foreground">Niva Support Companion</h3>
-            <p className="text-xs text-muted-foreground max-w-xs">
-              {loadStatus === 'loading'
-                ? 'Preparing your private conversation space…'
-                : 'Here with you in a safe, judgment-free space.'}
-            </p>
-          </div>
+          Deliberately NOT a drawn face. A hand-authored portrait sits straight
+          in the uncanny valley — a face that is almost right is worse than no
+          face, and this is the surface someone reaches when they are already
+          distressed. An abstract mark cannot be unsettling, so that is what
+          this is: concentric rings that breathe, in the app's own rose and
+          plum, with her name set in Playfair. */}
+      <div
+        className={`absolute inset-0 z-20 flex flex-col items-center justify-center p-6 transition-opacity duration-1000 ${
+          loadStatus === 'loaded' ? 'pointer-events-none opacity-0' : 'opacity-100'
+        }`}
+      >
+        <div className="relative flex h-36 w-36 items-center justify-center">
+          {/* Outer ring — the slowest, widest movement. */}
+          <span
+            aria-hidden
+            className="absolute inset-0 rounded-full border border-primary/25 motion-safe:animate-[niva-ring_5s_ease-in-out_infinite]"
+          />
+          {/* Middle ring, offset so the two never pulse together. */}
+          <span
+            aria-hidden
+            className="absolute inset-[14%] rounded-full border border-primary/35 motion-safe:animate-[niva-ring_5s_ease-in-out_infinite_1.6s]"
+          />
+          {/* Core: a soft warm disc, brighter while she is speaking. */}
+          <span
+            aria-hidden
+            className={`absolute inset-[30%] rounded-full bg-gradient-to-br from-primary/45 to-purple-400/35 blur-[2px] transition-all duration-700 ${
+              isSpeaking ? 'scale-110 opacity-100' : 'scale-100 opacity-80'
+            } motion-safe:animate-[niva-core_4s_ease-in-out_infinite]`}
+          />
         </div>
-      )}
+
+        <div className="mt-5 space-y-1 text-center">
+          <h3 className="font-serif text-xl font-normal text-foreground">Niva</h3>
+          <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">
+            {loadStatus === 'loading'
+              ? 'Here with you. Take your time.'
+              : 'Here with you in a safe, judgment-free space.'}
+          </p>
+        </div>
+      </div>
 
       {/* Status Badge.
           `aria-live="polite"` so a screen-reader user is told when Niva starts

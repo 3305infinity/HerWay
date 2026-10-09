@@ -29,6 +29,18 @@ if (!hasRealClerkKeys) {
 }
 
 const nextConfig: NextConfig = {
+  /**
+   * Build output directory.
+   *
+   * `next build` has no `--distDir` flag, so this is the only way to build
+   * without clobbering the `.next/` a running `npm run dev` is serving from.
+   * Doing that replaces the dev chunks mid-session and the browser then fails
+   * with `ChunkLoadError`.
+   *
+   *   NEXT_DIST_DIR=.next-verify npx next build
+   */
+  distDir: process.env.NEXT_DIST_DIR || '.next',
+
   images: {
     // Only the hosts we actually render images from. The previous wildcard
     // (`hostname: '**'`) let any URL in a model response be proxied through

@@ -40,3 +40,6 @@ yarn-error.log*
 next-env.d.ts
 
 certificates
+
+# Local dev server output (not part of the project)
+devserver.log

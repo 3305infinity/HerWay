@@ -4,8 +4,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
+import { motion } from 'framer-motion';
 
 import { apiPost } from '@/lib/api';
+import VoiceInput from '@/components/VoiceInput';
 import { ALL_INDIAN_REGIONS, composeLocation } from '@/lib/india';
 import type { CaseRecord, Situation } from '@/lib/types';
 
@@ -132,7 +134,7 @@ export default function Home() {
       <div className="min-h-[calc(100vh-3.5rem)] bg-background flex flex-col items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-2xl bg-card border border-border rounded-2xl p-6 sm:p-8 space-y-6 shadow-sm">
           <div className="space-y-2 border-b border-border/60 pb-5">
-            <span className="text-xs uppercase tracking-wider font-semibold text-primary">
+            <span className="inline-flex items-center gap-2.5 text-xs uppercase tracking-[0.16em] font-semibold text-primary before:block before:h-px before:w-6 before:bg-primary/60 before:content-['']">
               Step 1 of 2 · Understanding Your Situation
             </span>
             <h1 className="font-serif text-2xl sm:text-3xl text-foreground font-normal">
@@ -219,7 +221,7 @@ export default function Home() {
           {!researchError ? (
             <>
               <div className="space-y-2 text-center">
-                <span className="text-xs uppercase tracking-wider font-semibold text-primary">
+                <span className="inline-flex items-center gap-2.5 text-xs uppercase tracking-[0.16em] font-semibold text-primary before:block before:h-px before:w-6 before:bg-primary/60 before:content-['']">
                   Step 2 of 2 · Live research and verification
                 </span>
                 <h1 className="font-serif text-2xl sm:text-3xl text-foreground font-normal">
@@ -302,184 +304,169 @@ export default function Home() {
     <div className="min-h-screen bg-background text-foreground flex flex-col selection:bg-primary/20">
 
       {/* ── Urgent Help Bar (Discrete, Not Aggressive) ────────── */}
+      {/* The first thing on the page, so it carries the brand colour rather
+          than sitting in grey — but muted enough that it does not shout at
+          someone who is not in danger. Numbers are set large in Playfair
+          because the number is the useful part; the label is not. */}
       <aside
-        className="w-full border-b border-border/80 bg-muted/40 py-2.5 px-4 sm:px-8"
+        className="w-full border-b border-primary/15 bg-primary/[0.055] px-4 py-3 sm:px-8"
         aria-label="Immediate Emergency Help"
       >
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-primary shrink-0" aria-hidden="true" />
+        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+          <p className="flex items-center gap-2.5 text-xs text-muted-foreground">
+            <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-primary/60 motion-safe:animate-ping" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+            </span>
             <span className="font-medium text-foreground">In immediate danger?</span>
-            <span>Emergency helplines are available 24/7 across India & international lines:</span>
-          </div>
-          <div className="flex items-center gap-4 flex-wrap font-mono text-[11px] font-semibold text-foreground">
-            <a href="tel:112" className="hover:text-primary transition-colors underline-offset-4 hover:underline">
-              112 (National Emergency)
-            </a>
-            <span aria-hidden="true" className="opacity-40">·</span>
-            <a href="tel:181" className="hover:text-primary transition-colors underline-offset-4 hover:underline">
-              181 (Women Helpline)
-            </a>
-            <span aria-hidden="true" className="opacity-40">·</span>
-            <a href="tel:1091" className="hover:text-primary transition-colors underline-offset-4 hover:underline">
-              1091 (Women Police)
-            </a>
+            <span className="hidden sm:inline">These lines answer 24/7, anywhere in India.</span>
+          </p>
+
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+            {[
+              { n: '112', label: 'Emergency' },
+              { n: '181', label: 'Women helpline' },
+              { n: '1091', label: 'Women police' },
+            ].map((line) => (
+              <a
+                key={line.n}
+                href={`tel:${line.n}`}
+                className="group flex items-baseline gap-1.5 transition-colors hover:text-primary"
+              >
+                <span className="font-serif text-lg leading-none text-foreground transition-colors group-hover:text-primary">
+                  {line.n}
+                </span>
+                <span className="text-[11px] text-muted-foreground transition-colors group-hover:text-primary">
+                  {line.label}
+                </span>
+              </a>
+            ))}
           </div>
         </div>
       </aside>
 
-      {/* ── HERO SECTION: Editorial Asymmetry ────────────────── */}
-      <section className="relative px-4 sm:px-8 pt-10 sm:pt-16 pb-16 sm:pb-24 border-b border-border/60">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
+      {/* ── THE OPENING ──────────────────────────────────────────
+          There is no marketing hero above this any more.
 
-          {/* Left Column: Editorial Headline & Restrained Copy (7 cols) */}
-          <div className="lg:col-span-7 space-y-6 sm:space-y-8">
-            <div className="space-y-3">
-              <span className="inline-block text-[11px] tracking-[0.2em] font-medium text-primary uppercase">
-                HerWay · Women&apos;s Safety &amp; Resource Intelligence
-              </span>
+          What was there was the standard arrangement: eyebrow, headline,
+          paragraph, two buttons, a row of ticks, an image — six things
+          competing, and a "Tell HerWay what happened ↓" button whose entire
+          job was to scroll past itself to this form.
 
-              <h1 className="font-serif text-4xl sm:text-6xl lg:text-[4.25rem] font-normal leading-[1.08] tracking-tight text-foreground">
-                You don&apos;t have to figure it out{' '}
-                <span className="italic font-normal text-primary">alone.</span>
-              </h1>
-            </div>
-
-            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-xl font-normal">
-              When something doesn&apos;t feel right, HerWay helps you understand what is happening,
-              find trustworthy current resources, and figure out safer next steps.
-            </p>
-
-            {/* Hero CTAs */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => scrollToInput()}
-                className="px-6 py-3.5 bg-primary text-primary-foreground font-medium text-sm rounded-xl hover:bg-primary/90 transition-all shadow-sm flex items-center justify-center gap-2 group"
-              >
-                <span>Tell HerWay what happened</span>
-                <span className="transition-transform group-hover:translate-y-0.5">↓</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const el = document.getElementById('editorial-support');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="px-5 py-3.5 border border-border/80 text-foreground font-medium text-sm rounded-xl hover:bg-muted/60 transition-colors flex items-center justify-center"
-              >
-                Explore support options →
-              </button>
-            </div>
-
-            {/* What HerWay actually does — claims we can stand behind */}
-            <div className="pt-2 flex items-center gap-6 text-xs text-muted-foreground flex-wrap">
-              <span className="flex items-center gap-1.5">
-                <span className="text-emerald-500 font-bold">✓</span> Private — never posted publicly
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="text-emerald-500 font-bold">✓</span> Official Indian government sources first
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="text-emerald-500 font-bold">✓</span> Every claim shows its source
-              </span>
-            </div>
-          </div>
-
-          {/* Right Column: Fine Art Editorial Illustration (5 cols) */}
-          <div className="lg:col-span-5 flex justify-center lg:justify-end">
-            <div className="relative w-full max-w-md">
-              {/* Archival border & soft shadow frame */}
-              <div className="relative rounded-2xl overflow-hidden border border-border/80 bg-card shadow-lg p-2.5 transition-transform hover:scale-[1.01] duration-500">
-                <div className="relative aspect-[4/3] sm:aspect-[3/4] w-full rounded-xl overflow-hidden bg-muted/40">
-                  <Image
-                    src="/images/haven-hero.jpg"
-                    alt="Editorial fine-art illustration representing a woman of calm strength, quiet resilience, and dignity"
-                    fill
-                    priority
-                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 45vw, 480px"
-                    className="object-cover object-center"
-                  />
-                </div>
-
-                <div className="pt-3 px-2 pb-1 text-center">
-                  <p className="font-serif italic text-xs text-muted-foreground leading-normal">
-                    &ldquo;A safe, judgment-free space to find your footing and know your rights.&rdquo;
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* ── SECTION: "You Can Come Here With Anything" ───────── */}
-      <section className="px-4 sm:px-8 py-14 sm:py-20 border-b border-border/60 bg-muted/20">
-        <div className="max-w-5xl mx-auto space-y-8">
-          <div className="space-y-2">
-            <span className="text-xs uppercase tracking-wider font-semibold text-primary">
-              Where to start
-            </span>
-            <h2 className="font-serif text-2xl sm:text-4xl text-foreground font-normal tracking-tight">
-              Some problems are difficult to explain.
-            </h2>
-            <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
-              Whether it started with a single uncomfortable interaction or years of quiet control,
-              HerWay meets you where you are. Select a context or write freely below.
-            </p>
-          </div>
-
-          {/* Asymmetric Interactive Category Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
-            {CATEGORIES.slice(0, 8).map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => scrollToInput(cat.id, cat.starter)}
-                className={`text-left p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 group ${
-                  selectedCategory === cat.id
-                    ? 'border-primary bg-primary/8 text-foreground'
-                    : 'border-border/80 bg-card hover:border-primary/50 text-foreground'
-                }`}
-              >
-                <div className="space-y-1">
-                  <h3 className="text-sm font-medium leading-snug group-hover:text-primary transition-colors">
-                    {cat.label}
-                  </h3>
-                  <span className="text-[11px] text-muted-foreground capitalize">
-                    {cat.group === 'safety' ? 'Safety priority' : 'Information & options'}
-                  </span>
-                </div>
-                <span className="text-xs text-primary font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  Begin here →
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── PRIMARY PRODUCT ACTION: What Happened? ───────────── */}
+          Nobody arrives here browsing. They arrive with something that has
+          happened to them. So the page opens with the question and the place
+          to answer it, and the pitch is simply gone. The headline spans the
+          full width; underneath, the writing surface takes the larger column
+          and the illustration sits quietly beside it. */}
       <section
         id="tell-herway"
         ref={inputSectionRef}
-        className="px-4 sm:px-8 py-16 sm:py-24 border-b border-border/60 scroll-mt-14"
+        className="px-4 sm:px-8 pt-10 sm:pt-14 pb-16 sm:pb-20 border-b border-border/60 scroll-mt-14"
       >
-        <div className="max-w-3xl mx-auto space-y-8">
-          <div className="space-y-2 text-center sm:text-left">
-            <span className="text-xs uppercase tracking-wider font-semibold text-primary">
-              Interactive Intake
-            </span>
-            <h2 className="font-serif text-3xl sm:text-4xl text-foreground font-normal tracking-tight">
-              What happened?
-            </h2>
-            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-              Describe your situation in your own words. We will analyze the facts, search verified
-              resources, and build your personalized next steps.
+        <div className="mx-auto max-w-6xl">
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.22, 0.61, 0.36, 1] }}
+            className="max-w-3xl"
+          >
+            <h1 className="font-serif text-[2.5rem] font-normal leading-[1.05] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
+              You don&apos;t have to figure
+              <br className="hidden sm:block" /> it out{' '}
+              <span className="italic text-primary">alone.</span>
+            </h1>
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+              Tell HerWay what happened, in your own words. It separates what you stated
+              as fact from what is still uncertain, looks up current Indian resources for
+              it, and gives you steps you can choose from.
             </p>
-          </div>
+          </motion.div>
+
+          <div className="mt-10 grid grid-cols-1 gap-8 lg:mt-12 lg:grid-cols-12 lg:gap-10">
+            <div className="space-y-6 lg:col-span-7">
+
+          {/* The category list used to be its own section immediately above
+              this one — two templated blocks doing the same job, asking you to
+              start twice. Folded in here as an optional way in, so there is one
+              place to begin instead of two. */}
+          <details className="group rounded-xl border border-border/70 bg-muted/20">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">
+              <span>
+                Not sure how to start?{' '}
+                <span className="text-foreground">Pick something close instead.</span>
+              </span>
+              <span
+                aria-hidden
+                className="shrink-0 text-xs text-muted-foreground transition-transform duration-200 group-open:rotate-180"
+              >
+                ▾
+              </span>
+            </summary>
+            <div className="border-t border-border/70 p-3">
+            {/* Category list.
+                Rows rather than a card grid. Eight identical bordered rectangles
+                read as filler — the eye skims them as one block and lands on
+                none. As rows with a hairline between, each one is a line in a
+                list you actually read, and the safety entries can carry a
+                coloured rule without the whole grid turning into a traffic
+                light. */}
+            <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
+              {CATEGORIES.slice(0, 8).map((cat, index) => {
+                const selected = selectedCategory === cat.id;
+                const isSafety = cat.group === 'safety';
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => scrollToInput(cat.id, cat.starter)}
+                    className={`group relative flex w-full items-center gap-4 px-4 py-3.5 text-left transition-colors duration-150 sm:px-5 ${
+                      index !== 0 ? 'border-t border-border/60' : ''
+                    } ${selected ? 'bg-primary/[0.07]' : 'hover:bg-muted/50'}`}
+                  >
+                    {/* Accent rule. Grows from the top edge on hover, so the row
+                        you are pointing at is unmistakable without it jumping. */}
+                    <span
+                      aria-hidden
+                      className={`absolute left-0 top-0 w-[3px] transition-all duration-200 ${
+                        isSafety ? 'bg-primary' : 'bg-muted-foreground/40'
+                      } ${selected ? 'h-full' : 'h-0 group-hover:h-full'}`}
+                    />
+
+                    {/* Index. Playfair numerals give the list an editorial spine
+                        and make eight rows scannable by position. */}
+                    <span
+                      className={`w-6 shrink-0 font-serif text-base tabular-nums transition-colors ${
+                        selected ? 'text-primary' : 'text-muted-foreground/50 group-hover:text-primary/70'
+                      }`}
+                    >
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium leading-snug text-foreground">
+                        {cat.label}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                        {isSafety ? 'Safety priority' : 'Information & options'}
+                      </span>
+                    </span>
+
+                    <span
+                      aria-hidden
+                      className={`shrink-0 text-base transition-all duration-200 ${
+                        selected
+                          ? 'translate-x-0 text-primary opacity-100'
+                          : '-translate-x-1 text-primary opacity-0 group-hover:translate-x-0 group-hover:opacity-100'
+                      }`}
+                    >
+                      →
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            </div>
+          </details>
 
           {errorMessage && (
             <div className="p-4 rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-800 dark:text-rose-300 text-sm">
@@ -487,7 +474,18 @@ export default function Home() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          {/* The primary action of the whole product, so it gets a surface of
+              its own rather than sitting loose on the page background. The
+              rose rule along the top ties it to the brand without another
+              coloured panel. */}
+          <form
+            onSubmit={handleSubmit}
+            className="relative space-y-5 overflow-hidden rounded-2xl border border-border/80 bg-card p-5 elevate-1 sm:p-7"
+          >
+            <span
+              aria-hidden
+              className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-primary via-primary/70 to-transparent"
+            />
             {/* Category selection */}
             <div className="space-y-1.5">
               <label htmlFor="category-select" className="text-xs font-medium text-muted-foreground">
@@ -513,18 +511,44 @@ export default function Home() {
                 <label htmlFor="situation-textarea" className="text-xs font-medium text-muted-foreground">
                   Your situation description
                 </label>
-                <span className="text-[11px] text-muted-foreground">
-                  {situationText.length} characters (minimum 10)
+                {/* Turns amber until the minimum is met, so the requirement is
+                    visible while typing rather than only on submit. */}
+                <span
+                  className={`text-[11px] tabular-nums transition-colors ${
+                    situationText.length === 0
+                      ? 'text-muted-foreground'
+                      : situationText.length < 10
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-emerald-600 dark:text-emerald-400'
+                  }`}
+                >
+                  {situationText.length < 10
+                    ? `${situationText.length} / 10 characters`
+                    : `${situationText.length} characters`}
                 </span>
               </div>
               <textarea
                 id="situation-textarea"
-                rows={6}
+                rows={7}
                 value={situationText}
                 onChange={(e) => setSituationText(e.target.value)}
-                placeholder="Tell HerWay what you're dealing with..."
-                className="w-full p-4 rounded-xl border border-input bg-card text-foreground text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all leading-relaxed custom-scrollbar resize-y"
+                placeholder="You can start anywhere — what happened, when it started, or just how it has been feeling."
+                className="custom-scrollbar w-full resize-y rounded-xl border border-input bg-background p-4 text-[15px] leading-relaxed text-foreground transition-all placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
+              {/* Dictation. Typing out what happened is hardest exactly when
+                  you are most upset, and harder again if you think in Hindi and
+                  the box expects English. Runs entirely in the browser. */}
+              <VoiceInput
+                onTranscript={(text) =>
+                  setSituationText((prev) => (prev ? `${prev} ${text}` : text))
+                }
+              />
+
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Plain words are enough — in English, Hindi or a mix of both. You do not
+                need the right legal terms, and you can leave out anything you would
+                rather not write down.
+              </p>
             </div>
 
             {/* Location — optional, never assumed */}
@@ -585,209 +609,240 @@ export default function Home() {
               </button>
             </div>
           </form>
+            </div>
+
+            {/* The illustration, now a companion to the form rather than a
+                competitor to the headline. It carries the three things HerWay
+                will actually do with what you write — which is more use beside
+                an empty textarea than a row of ticks under a slogan was. */}
+            <motion.aside
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.14, duration: 0.45, ease: [0.22, 0.61, 0.36, 1] }}
+              className="lg:col-span-5"
+            >
+              <div className="overflow-hidden rounded-2xl border border-border/80 bg-card elevate-2">
+                <div className="relative aspect-[4/3] w-full bg-muted/40 lg:aspect-[4/5]">
+                  <Image
+                    src="/images/haven-hero.jpg"
+                    alt="Editorial illustration of a woman: calm strength, quiet resilience, dignity"
+                    fill
+                    priority
+                    sizes="(max-width: 1024px) 100vw, 420px"
+                    className="object-cover object-center"
+                  />
+                </div>
+
+                <ul className="divide-y divide-border/60">
+                  {[
+                    ['Private', 'Nothing you write is posted publicly, ever.'],
+                    ['Sourced', 'Every claim links to where it came from.'],
+                    ['Current', 'Looked up now, not recalled from training data.'],
+                  ].map(([label, detail]) => (
+                    <li key={label} className="flex gap-3 px-4 py-3">
+                      <span className="w-16 shrink-0 font-serif text-sm text-primary">
+                        {label}
+                      </span>
+                      <span className="text-xs leading-relaxed text-muted-foreground">
+                        {detail}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </motion.aside>
+          </div>
         </div>
       </section>
 
       {/* ── STORYTELLING: From Confusion to a Clearer Next Step ─ */}
-      <section className="px-4 sm:px-8 py-16 sm:py-24 border-b border-border/60 bg-muted/15">
-        <div className="max-w-5xl mx-auto space-y-12">
+      <section className="px-4 sm:px-8 py-20 sm:py-28 bg-muted/15">
+        <div className="max-w-6xl mx-auto space-y-14">
           <div className="space-y-3">
-            <span className="text-xs uppercase tracking-wider font-semibold text-primary">
-              The Process
+            <span className="inline-flex items-center gap-2.5 text-xs uppercase tracking-[0.16em] font-semibold text-primary before:block before:h-px before:w-6 before:bg-primary/60 before:content-['']">
+              How it works
             </span>
             <h2 className="font-serif text-3xl sm:text-4xl text-foreground font-normal tracking-tight">
               From confusion to a clearer next step.
             </h2>
             <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
-              When trauma or safety risks are present, generic advice is dangerous. HerWay runs a
-              disciplined, verifiable sequence.
+              Generic advice can be dangerous when safety is involved. Here is the sequence
+              HerWay actually runs, and what you get to see at each stage.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="space-y-3 border-t border-border/80 pt-4">
-              <span className="font-mono text-xs font-semibold text-primary">01</span>
-              <h3 className="font-serif text-lg text-foreground font-normal">Tell us what happened</h3>
-              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                Speak freely in plain words without needing legal terminology. HerWay separates objective
-                facts from uncertainties.
-              </p>
-            </div>
+          {/* A sequence, drawn as one.
+              Four separate bordered columns described a process but did not
+              look like one — nothing connected step 1 to step 2. A single rule
+              running behind the numbers does, and the steps reveal in order as
+              you scroll so the eye travels the way the process does. */}
+          <ol className="relative grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-4">
+            {/* The connecting line, behind the markers. Fades at the end rather
+                than stopping dead, because the process continues past step 4. */}
+            <span
+              aria-hidden
+              className="absolute left-0 right-0 top-[7px] hidden h-px bg-gradient-to-r from-primary/40 via-primary/25 to-transparent lg:block"
+            />
 
-            <div className="space-y-3 border-t border-border/80 pt-4">
-              <span className="font-mono text-xs font-semibold text-primary">02</span>
-              <h3 className="font-serif text-lg text-foreground font-normal">Live, targeted research</h3>
-              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                We query current statutes (PWDVA, POSH, IPC/BNS), national portals, and physical crisis
-                desks specific to your location.
-              </p>
-            </div>
-
-            <div className="space-y-3 border-t border-border/80 pt-4">
-              <span className="font-mono text-xs font-semibold text-primary">03</span>
-              <h3 className="font-serif text-lg text-foreground font-normal">You can see every source</h3>
-              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                Each recommendation links to where it came from, and each resource is
-                labelled by how far we could check it — official government page, likely
-                official, or an unverified listing you should confirm first.
-              </p>
-            </div>
-
-            <div className="space-y-3 border-t border-border/80 pt-4">
-              <span className="font-mono text-xs font-semibold text-primary">04</span>
-              <h3 className="font-serif text-lg text-foreground font-normal">Actionable safety plan</h3>
-              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                Receive practical steps organized by urgency: right now, next 24 hours, evidence
-                preservation, and ongoing follow-up.
-              </p>
-            </div>
-          </div>
+            {[
+              {
+                title: 'Tell us what happened',
+                body: 'Speak freely in plain words without needing legal terminology. HerWay separates objective facts from uncertainties.',
+              },
+              {
+                title: 'Live, targeted research',
+                body: 'We query current statutes (PWDVA, POSH, IPC/BNS), national portals, and physical crisis desks specific to your location.',
+              },
+              {
+                title: 'You can see every source',
+                body: 'Each recommendation links to where it came from, and each resource is labelled by how far we could check it — official government page, likely official, or an unverified listing you should confirm first.',
+              },
+              {
+                title: 'Actionable safety plan',
+                body: 'Practical steps organised by urgency: right now, next 24 hours, evidence preservation, and ongoing follow-up.',
+              },
+            ].map((step, index) => (
+              <motion.li
+                key={step.title}
+                initial={{ opacity: 0, y: 14 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '0px 0px -80px 0px' }}
+                transition={{ delay: index * 0.08, duration: 0.3, ease: [0.22, 0.61, 0.36, 1] }}
+                className="relative space-y-3 pt-6"
+              >
+                {/* Marker sits on the line. The ring is the page background so
+                    the rule appears to pass behind it. */}
+                <span
+                  aria-hidden
+                  className="absolute left-0 top-1 block h-3 w-3 rounded-full border-2 border-primary bg-background ring-4 ring-background"
+                />
+                <span className="block font-serif text-sm tabular-nums text-primary">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <h3 className="font-serif text-lg font-normal text-foreground">{step.title}</h3>
+                <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                  {step.body}
+                </p>
+              </motion.li>
+            ))}
+          </ol>
         </div>
       </section>
 
       {/* ── RESEARCH VISUALIZATION: Trust & Verification ─────── */}
-      <section className="px-4 sm:px-8 py-16 sm:py-24 border-b border-border/60">
-        <div className="max-w-5xl mx-auto space-y-10">
+      <section className="px-4 sm:px-8 py-16 sm:py-24 border-y border-border/60">
+        <div className="max-w-4xl mx-auto space-y-10">
           <div className="space-y-2">
-            <span className="text-xs uppercase tracking-wider font-semibold text-primary">
-              Resource Trust
+            <span className="inline-flex items-center gap-2.5 text-xs uppercase tracking-[0.16em] font-semibold text-primary before:block before:h-px before:w-6 before:bg-primary/60 before:content-['']">
+              Where answers come from
             </span>
             <h2 className="font-serif text-3xl sm:text-4xl text-foreground font-normal tracking-tight">
               Current information, not yesterday&apos;s answer.
             </h2>
             <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
-              Legal procedures, emergency hotlines, and shelter availability change. HerWay queries live
-              search channels rather than relying on memorized LLM data.
+              Helpline numbers move, offices close, procedures get amended. HerWay looks them
+              up when you ask rather than repeating what a model memorised.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-5 rounded-2xl border border-border/80 bg-card space-y-2">
-              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded">
-                Official Sources
-              </span>
-              <h3 className="text-sm font-semibold text-foreground">Government &amp; Statutory Registries</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Direct statutory provisions from PWDVA 2005, POSH Act 2013, NCW, and Sakhi One Stop Centres.
-              </p>
-            </div>
-
-            <div className="p-5 rounded-2xl border border-border/80 bg-card space-y-2">
-              <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded">
-                Local Resources
-              </span>
-              <h3 className="text-sm font-semibold text-foreground">Verified Nearby Locations</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Structured addresses, operating hours, and retrieved phone numbers for physical women&apos;s desks.
-              </p>
-            </div>
-
-            <div className="p-5 rounded-2xl border border-border/80 bg-card space-y-2">
-              <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded">
-                Evidence Guidance
-              </span>
-              <h3 className="text-sm font-semibold text-foreground">Safe Documentation</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Clear protocols for capturing screenshots and timestamps only when your devices are secure.
-              </p>
-            </div>
-
-            <div className="p-5 rounded-2xl border border-border/80 bg-card space-y-2">
-              <span className="text-xs font-semibold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded">
-                Dynamic Adaptation
-              </span>
-              <h3 className="text-sm font-semibold text-foreground">Living Safety Plans</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                If your situation changes or escalates, return anytime to update HerWay and adapt your plan.
-              </p>
-            </div>
+          {/* The three provenance levels the product actually uses.
+              This was four cards with emerald / blue / amber / purple badges —
+              colours chosen for variety, carrying no meaning, which is the
+              surest sign a UI was assembled rather than designed. Worse, one
+              card promised "Verified Nearby Locations", which is the opposite
+              of what HerWay does: a map listing is never presented as checked.
+              These now mirror `ResourceVerification` in the backend, so the
+              page describes the real system and the colour means something. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {[
+              {
+                tier: 'Official source',
+                dot: 'bg-emerald-500',
+                ring: 'group-hover:border-emerald-500/40',
+                title: 'A government page said so',
+                body: 'Statutory provisions and helplines traced to PWDVA 2005, POSH Act 2013, NCW, NALSA or a .gov.in / .nic.in page we can link you to.',
+              },
+              {
+                tier: 'Likely official',
+                dot: 'bg-sky-500',
+                ring: 'group-hover:border-sky-500/40',
+                title: 'Strong signals, not confirmed',
+                body: 'A listing that looks like a One Stop Centre or Mahila Thana — the name and domain line up, but we could not reach an official page saying so.',
+              },
+              {
+                tier: 'Unverified listing',
+                dot: 'bg-amber-500',
+                ring: 'group-hover:border-amber-500/40',
+                title: 'Found, and shown as found',
+                body: 'A public map result. It does not confirm the place is open, operating or suitable. Call before you travel — HerWay will say this every time.',
+              },
+            ].map((level, index) => (
+              <motion.div
+                key={level.tier}
+                initial={{ opacity: 0, y: 14 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '0px 0px -60px 0px' }}
+                transition={{ delay: index * 0.07, duration: 0.3, ease: [0.22, 0.61, 0.36, 1] }}
+                className={`group space-y-2.5 rounded-xl border border-border/80 bg-card p-5 transition-colors ${level.ring}`}
+              >
+                <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <span className={`h-1.5 w-1.5 rounded-full ${level.dot}`} aria-hidden />
+                  {level.tier}
+                </span>
+                <h3 className="font-serif text-base font-normal text-foreground">{level.title}</h3>
+                <p className="text-xs leading-relaxed text-muted-foreground">{level.body}</p>
+              </motion.div>
+            ))}
           </div>
+
+          <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
+            Every resource HerWay shows you carries one of these three labels. Nothing is
+            presented as checked when it was not.
+          </p>
         </div>
       </section>
 
       {/* ── ORIGINAL HERWAY FEATURES (Secondary & Clean) ───────── */}
-      <section id="editorial-support" className="px-4 sm:px-8 py-16 sm:py-24 border-b border-border/60 bg-muted/15">
-        <div className="max-w-5xl mx-auto space-y-8">
+      <section id="editorial-support" className="px-4 sm:px-8 py-12 sm:py-16 border-b border-border/60">
+        <div className="max-w-5xl mx-auto space-y-6">
           <div className="space-y-2">
-            <span className="text-xs uppercase tracking-wider font-semibold text-primary">
-              Additional Support
+            <span className="inline-flex items-center gap-2.5 text-xs uppercase tracking-[0.16em] font-semibold text-primary before:block before:h-px before:w-6 before:bg-primary/60 before:content-['']">
+              Everything else
             </span>
             <h2 className="font-serif text-2xl sm:text-3xl text-foreground font-normal tracking-tight">
-              Other ways HerWay can support you today.
+              Other ways in.
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <Link
-              href="/lawbot"
-              className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 transition-colors space-y-2 group"
-            >
-              <span className="text-xs text-muted-foreground">Need legal information?</span>
-              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center justify-between">
-                <span>LawBot</span>
-                <span>→</span>
-              </h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Explore legal acts, protection orders, and legal aid rights.
-              </p>
-            </Link>
-
-            <Link
-              href="/therapybot"
-              className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 transition-colors space-y-2 group"
-            >
-              <span className="text-xs text-muted-foreground">Need someone to talk to?</span>
-              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center justify-between">
-                <span>Talk to Niva</span>
-                <span>→</span>
-              </h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                A calm, trauma-informed supportive companion with voice support.
-              </p>
-            </Link>
-
-            <Link
-              href="/community"
-              className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 transition-colors space-y-2 group"
-            >
-              <span className="text-xs text-muted-foreground">Want to connect?</span>
-              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center justify-between">
-                <span>Community</span>
-                <span>→</span>
-              </h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Read anonymous shared experiences and peer encouragement.
-              </p>
-            </Link>
-
-            <Link
-              href="/discreet-message"
-              className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 transition-colors space-y-2 group"
-            >
-              <span className="text-xs text-muted-foreground">Need discreet help?</span>
-              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center justify-between">
-                <span>Discreet Message</span>
-                <span>→</span>
-              </h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Hide text inside an ordinary image using steganography.
-              </p>
-            </Link>
-
-            <Link
-              href="/cases"
-              className="p-5 rounded-2xl border border-border/80 bg-card hover:border-primary/50 transition-colors space-y-2 group"
-            >
-              <span className="text-xs text-muted-foreground">Saved plans?</span>
-              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center justify-between">
-                <span>My Cases</span>
-                <span>→</span>
-              </h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Access your ongoing safety plans, actions, and research trails.
-              </p>
-            </Link>
-          </div>
+          <ul className="divide-y divide-border/60 border-y border-border/60">
+            {[
+              { href: '/lawbot', ask: 'Need legal information?', name: 'LawBot' },
+              { href: '/therapybot', ask: 'Need someone to talk to?', name: 'Talk to Niva' },
+              { href: '/community', ask: 'Want to connect?', name: 'Community' },
+              { href: '/discreet-message', ask: 'Need discreet help?', name: 'Discreet Message' },
+              { href: '/cases', ask: 'Saved plans?', name: 'My Cases' },
+            ].map((item) => (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className="group flex items-center gap-4 py-3.5 transition-colors"
+                >
+                  <span className="w-44 shrink-0 text-xs text-muted-foreground sm:w-56">
+                    {item.ask}
+                  </span>
+                  <span className="flex-1 font-serif text-lg font-normal text-foreground transition-colors group-hover:text-primary">
+                    {item.name}
+                  </span>
+                  <span
+                    aria-hidden
+                    className="shrink-0 text-primary opacity-0 transition-all duration-200 -translate-x-1 group-hover:translate-x-0 group-hover:opacity-100"
+                  >
+                    →
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 

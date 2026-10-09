@@ -37,14 +37,14 @@
     --radius: 0.5rem;
 
     /* Haven semantic tokens */
-    --haven-rose: 348 70% 46%;
-    --haven-rose-subtle: 348 60% 96%;
-    --haven-safe: 142 56% 40%;
-    --haven-safe-subtle: 142 56% 95%;
-    --haven-caution: 32 90% 46%;
-    --haven-caution-subtle: 32 90% 95%;
-    --haven-info: 220 60% 46%;
-    --haven-info-subtle: 220 60% 96%;
+    --herway-rose: 348 70% 46%;
+    --herway-rose-subtle: 348 60% 96%;
+    --herway-safe: 142 56% 40%;
+    --herway-safe-subtle: 142 56% 95%;
+    --herway-caution: 32 90% 46%;
+    --herway-caution-subtle: 32 90% 95%;
+    --herway-info: 220 60% 46%;
+    --herway-info-subtle: 220 60% 96%;
   }
 
   .dark {
@@ -77,11 +77,11 @@
     --input: 275 16% 18%;
     --ring: 350 72% 62%;
 
-    --haven-rose: 350 72% 62%;
-    --haven-rose-subtle: 350 40% 16%;
-    --haven-safe-subtle: 142 40% 14%;
-    --haven-caution-subtle: 32 60% 16%;
-    --haven-info-subtle: 220 40% 16%;
+    --herway-rose: 350 72% 62%;
+    --herway-rose-subtle: 350 40% 16%;
+    --herway-safe-subtle: 142 40% 14%;
+    --herway-caution-subtle: 32 60% 16%;
+    --herway-info-subtle: 220 40% 16%;
   }
 }
 
@@ -95,8 +95,205 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Editorial headings.
+     Playfair is a high-contrast display face: at display sizes it needs
+     negative tracking to stop the letters drifting apart, and a tighter
+     leading than the browser default so a two-line headline reads as one
+     object rather than two stacked lines. */
   h1, h2, h3, h4, h5, h6 {
     letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  h1 {
+    letter-spacing: -0.022em;
+    line-height: 1.12;
+  }
+  h2 {
+    letter-spacing: -0.016em;
+    line-height: 1.2;
+  }
+
+  /* Stops a lone word falling to its own line at the end of a paragraph —
+     distractingly common at the narrow column widths used here. */
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Motion                                                                    */
+/* ------------------------------------------------------------------------ */
+/* CSS-side counterpart to `lib/motion.ts`. Anything that does not need React
+   state uses these, so there is no reason to pull framer-motion into a
+   component just to fade something in.
+
+   Same rules apply: short, soft, small travel. Nothing here belongs on
+   emergency UI. */
+
+/* ------------------------------------------------------------------------ */
+/* Depth                                                                     */
+/* ------------------------------------------------------------------------ */
+/* Everything was a 1px border on a flat fill, which is why the page read as
+   wireframe rather than product. These are layered shadows — a tight contact
+   shadow plus a wider ambient one — tinted plum rather than neutral grey so
+   they belong to the palette instead of greying it out. */
+
+@layer utilities {
+  .elevate-1 {
+    box-shadow:
+      0 1px 2px -1px hsl(280 30% 20% / 0.08),
+      0 2px 8px -2px hsl(280 30% 20% / 0.06);
+  }
+  .elevate-2 {
+    box-shadow:
+      0 1px 2px -1px hsl(280 30% 20% / 0.10),
+      0 4px 14px -4px hsl(280 30% 20% / 0.10),
+      0 12px 28px -12px hsl(280 30% 20% / 0.10);
+  }
+  .elevate-3 {
+    box-shadow:
+      0 2px 4px -2px hsl(280 30% 20% / 0.12),
+      0 8px 24px -8px hsl(280 30% 20% / 0.14),
+      0 24px 48px -20px hsl(280 30% 20% / 0.16);
+  }
+
+  /* In dark mode a shadow cannot darken anything, so depth comes from a hairline
+     of light along the top edge instead — how a raised surface actually catches
+     light. */
+  .dark .elevate-1 {
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.04),
+      0 2px 8px -2px hsl(0 0% 0% / 0.4);
+  }
+  .dark .elevate-2 {
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.06),
+      0 4px 14px -4px hsl(0 0% 0% / 0.5);
+  }
+  .dark .elevate-3 {
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.08),
+      0 8px 28px -8px hsl(0 0% 0% / 0.6);
+  }
+
+  /* A card surface that is slightly translucent, so the grain and wash behind
+     it show through and it sits *in* the page rather than on top of it. Used
+     sparingly — body text needs an opaque background to stay legible. */
+  .surface {
+    background-color: hsl(var(--card) / 0.82);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
+
+@layer base {
+  :root {
+    --ease-calm: cubic-bezier(0.22, 0.61, 0.36, 1);
+    --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+    --duration-fast: 160ms;
+    --duration-base: 280ms;
+    --duration-slow: 380ms;
+  }
+}
+
+@layer utilities {
+  @keyframes herway-fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  @keyframes herway-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes herway-slide-in-right {
+    from { opacity: 0; transform: translateX(16px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* Loading placeholder sweep. Deliberately slow and low-contrast: a fast
+     shimmer on a page someone is anxiously waiting on reads as urgency. */
+  @keyframes herway-shimmer {
+    from { background-position: -200% 0; }
+    to   { background-position: 200% 0; }
+  }
+
+  /* Niva's placeholder mark. Two rings on the same 5s cycle but offset, so
+     they never pulse together — synchronised rings read as a loading spinner,
+     which is the one thing this must not look like. */
+  @keyframes niva-ring {
+    0%, 100% { transform: scale(1); opacity: 0.55; }
+    50%      { transform: scale(1.06); opacity: 1; }
+  }
+
+  @keyframes niva-core {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.07); }
+  }
+
+  /* Used only on the "listening"/"active" status dots. */
+  @keyframes herway-breathe {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.72; transform: scale(0.94); }
+  }
+
+  .animate-fade-up {
+    animation: herway-fade-up var(--duration-base) var(--ease-calm) both;
+  }
+  .animate-fade-in {
+    animation: herway-fade-in var(--duration-base) var(--ease-calm) both;
+  }
+  .animate-slide-in-right {
+    animation: herway-slide-in-right var(--duration-slow) var(--ease-calm) both;
+  }
+  .animate-breathe {
+    animation: herway-breathe 2.8s ease-in-out infinite;
+  }
+
+  .skeleton {
+    background-image: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 25%,
+      hsl(var(--accent)) 37%,
+      hsl(var(--muted)) 63%
+    );
+    background-size: 200% 100%;
+    animation: herway-shimmer 1.8s linear infinite;
+  }
+
+  /* Stagger helper for CSS-only lists. Children get an increasing delay so a
+     list settles in reading order rather than all at once. */
+  .stagger-children > * {
+    animation: herway-fade-up var(--duration-base) var(--ease-calm) both;
+  }
+  .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-children > *:nth-child(2) { animation-delay: 55ms; }
+  .stagger-children > *:nth-child(3) { animation-delay: 110ms; }
+  .stagger-children > *:nth-child(4) { animation-delay: 165ms; }
+  .stagger-children > *:nth-child(5) { animation-delay: 220ms; }
+  .stagger-children > *:nth-child(6) { animation-delay: 275ms; }
+  .stagger-children > *:nth-child(n + 7) { animation-delay: 310ms; }
+}
+
+/* Honour the OS setting. This is not a nicety — motion can trigger nausea and
+   migraine, and a user who has asked for less of it is telling us something
+   about how they need to use this page. Framer Motion is handled separately by
+   `MotionConfig reducedMotion="user"` in the root layout. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .skeleton {
+    animation: none;
+    background-image: none;
+    background-color: hsl(var(--muted));
   }
 }
 

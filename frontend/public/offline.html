@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Emergency numbers — HerWay</title>
+    <!--
+      Entirely self-contained: inline CSS, no fonts, no scripts, no images.
+      Every external reference would be one more thing to fail on the exact
+      occasion this page exists for — a phone with no data and no signal.
+      It must render from cache alone.
+
+      Numbers are hardcoded here on purpose, which is the one place in HerWay
+      that is correct. These are national, they do not change, and a lookup
+      cannot run offline. Each is traceable to the registry in
+      backend/india_resources.py.
+    -->
+    <style>
+      :root {
+        --ink: #241820;
+        --muted: #6b5c66;
+        --rose: #c2305a;
+        --line: #e6dde2;
+        --paper: #faf7f5;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ink: #f3ecef;
+          --muted: #a898a3;
+          --rose: #ff8aa8;
+          --line: #332a30;
+          --paper: #150f13;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 28px 20px 40px;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      main { max-width: 34rem; margin: 0 auto; }
+      .status {
+        display: inline-block;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--rose);
+        font-weight: 600;
+      }
+      h1 {
+        font-family: Georgia, "Times New Roman", serif;
+        font-weight: 400;
+        font-size: 1.9rem;
+        line-height: 1.15;
+        margin: 10px 0 8px;
+      }
+      p.lede { color: var(--muted); font-size: 0.93rem; margin: 0 0 24px; }
+      ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+      li { border-bottom: 1px solid var(--line); }
+      a.line {
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+        padding: 15px 4px;
+        text-decoration: none;
+        color: inherit;
+      }
+      a.line:active { background: rgba(194, 48, 90, 0.07); }
+      .num {
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 1.65rem;
+        color: var(--rose);
+        min-width: 3.6rem;
+      }
+      .label { font-size: 0.9rem; }
+      .label small { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+      .note {
+        margin-top: 26px;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+      .note strong { color: var(--ink); font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <span class="status">You are offline</span>
+      <h1>These numbers still work.</h1>
+      <p class="lede">
+        Calling does not need internet — only phone signal. Tap any number to dial.
+      </p>
+
+      <ul>
+        <li>
+          <a class="line" href="tel:112">
+            <span class="num">112</span>
+            <span class="label">Emergency<small>Police, ambulance, fire — anywhere in India</small></span>
+          </a>
+        </li>
+        <li>
+          <a class="line" href="tel:181">
+            <span class="num">181</span>
+            <span class="label">Women helpline<small>Support, shelter and counselling, 24x7</small></span>
+          </a>
+        </li>
+        <li>
+          <a class="line" href="tel:1091">
+            <span class="num">1091</span>
+            <span class="label">Women in distress<small>Police women's helpline</small></span>
+          </a>
+        </li>
+        <li>
+          <a class="line" href="tel:1930">
+            <span class="num">1930</span>
+            <span class="label">Cyber crime<small>Online fraud, blackmail, harassment</small></span>
+          </a>
+        </li>
+        <li>
+          <a class="line" href="tel:1098">
+            <span class="num">1098</span>
+            <span class="label">CHILDLINE<small>If a child is at risk</small></span>
+          </a>
+        </li>
+        <li>
+          <a class="line" href="tel:14416">
+            <span class="num">14416</span>
+            <span class="label">Tele-MANAS<small>Mental health support</small></span>
+          </a>
+        </li>
+      </ul>
+
+      <p class="note">
+        <strong>If you cannot speak</strong>, 112 also accepts an SMS. If calling is not
+        safe right now, moving to where other people are — a shop, a neighbour's door,
+        a busy street — is often the fastest thing that helps.
+      </p>
+
+      <p class="note">
+        HerWay saved only this page to your device. Your cases, messages and plans were
+        not stored here.
+      </p>
+    </main>
+  </body>
+</html>

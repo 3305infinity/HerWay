@@ -15,7 +15,11 @@
  */
 
 import React from 'react';
+import { motion } from 'framer-motion';
+
 import { apiGet, apiPost } from '@/lib/api';
+import { Reveal } from '@/components/motion/Reveal';
+import ResourceFeedback from '@/components/ResourceFeedback';
 
 type Category = { value: string; label: string };
 
@@ -110,7 +114,7 @@ function VerificationBadge({ level, note }: { level: string; note: string }) {
 
 function ResourceCardItem({ resource }: { resource: Resource }) {
   return (
-    <li className="rounded-lg border border-border bg-card p-4 shadow-sm">
+    <li className="rounded-xl border border-border bg-card p-4 elevate-1 transition-all duration-150 hover:-translate-y-0.5 hover:border-primary/30 hover:elevate-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="font-semibold text-card-foreground">{resource.name}</h3>
         <VerificationBadge level={resource.verification} note={resource.verification_note} />
@@ -160,6 +164,10 @@ function ResourceCardItem({ resource }: { resource: Resource }) {
         {/* Stated rather than implied: the provider does not tell us this. */}
         <span className="italic">Opening status unknown</span>
       </div>
+
+      {/* The one thing search cannot tell us — whether it actually works.
+          Anonymous; see ResourceFeedback. */}
+      <ResourceFeedback phone={resource.phone} url={resource.url} name={resource.name} />
     </li>
   );
 }
@@ -231,14 +239,19 @@ export default function DiscoverPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Find places nearby</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+      <Reveal as="header" className="mb-7">
+        <p className="text-xs font-medium uppercase tracking-[0.14em] text-primary">
+          Local discovery
+        </p>
+        <h1 className="mt-2 font-serif text-3xl font-normal sm:text-4xl">
+          Find places nearby
+        </h1>
+        <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted-foreground">
           Search public listings for services in an area you choose. HerWay shows you
           what the sources say and what they leave out — it cannot tell you whether a
           place is safe, and it will not pretend otherwise.
         </p>
-      </header>
+      </Reveal>
 
       <form onSubmit={runSearch} className="mb-6 space-y-3 rounded-lg border border-border bg-card p-4">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -295,13 +308,23 @@ export default function DiscoverPage() {
         </button>
       </form>
 
-      {/* Loading */}
+      {/* Loading.
+          Skeleton cards in the shape of the results, so the page does not jump
+          when they land. A live search can take several seconds. */}
       {loading && (
-        <div
-          role="status"
-          className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground"
-        >
-          Searching public listings…
+        <div role="status" aria-label="Searching public listings" className="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="rounded-lg border border-border bg-card p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="skeleton h-4 w-40 rounded" />
+                <div className="skeleton h-4 w-24 rounded" />
+              </div>
+              <div className="mt-3 space-y-2">
+                <div className="skeleton h-3 w-3/4 rounded" />
+                <div className="skeleton h-3 w-1/2 rounded" />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -418,9 +441,19 @@ export default function DiscoverPage() {
             </div>
           )}
 
+          {/* Results settle in reading order. 45ms apart — enough to follow,
+              short enough that a list of six is fully settled in under a third
+              of a second. */}
           <ul className="space-y-3">
             {payload.resources.map((resource, i) => (
-              <ResourceCardItem key={`${resource.name}-${i}`} resource={resource} />
+              <motion.div
+                key={`${resource.name}-${i}`}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.045, duration: 0.28, ease: [0.22, 0.61, 0.36, 1] }}
+              >
+                <ResourceCardItem resource={resource} />
+              </motion.div>
             ))}
           </ul>
 

@@ -18,7 +18,11 @@
  */
 
 import React from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
+import { Reveal } from '@/components/motion/Reveal';
+import { fadeUp, slideInRight } from '@/lib/motion';
 
 type PlanStep = {
   id: string;
@@ -73,19 +77,24 @@ function Section({
   title,
   children,
   action,
+  delay = 0,
 }: {
   title: string;
   children: React.ReactNode;
   action?: React.ReactNode;
+  delay?: number;
 }) {
   return (
-    <section className="mb-8">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">{title}</h2>
+    <Reveal as="section" delay={delay} className="mb-10">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="font-serif text-xl font-normal tracking-tight">{title}</h2>
         {action}
       </div>
+      {/* A hairline under the heading gives the page an editorial spine and
+          stops the sections running together on a long scroll. */}
+      <div className="mb-4 h-px bg-gradient-to-r from-border via-border/60 to-transparent" />
       {children}
-    </section>
+    </Reveal>
   );
 }
 
@@ -207,27 +216,47 @@ export default function SafetyCenterPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
-      <h1 className="text-2xl font-bold tracking-tight">Safety Center</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Your plans, the people you trust, and your check-ins. Everything here is
-        yours and private to you.
-      </p>
+      <Reveal>
+        <p className="text-xs font-medium uppercase tracking-[0.14em] text-primary">
+          Yours alone
+        </p>
+        <h1 className="mt-2 font-serif text-3xl font-normal sm:text-4xl">Safety Center</h1>
+        <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted-foreground">
+          Your plans, the people you trust, and your check-ins. Everything here is
+          yours and private to you.
+        </p>
+      </Reveal>
 
-      {/* Emergency access first, always, no JS required beyond rendering. */}
-      <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
-        <h2 className="text-sm font-semibold">If you need help right now</h2>
-        <div className="mt-2 flex flex-wrap gap-3 text-sm">
-          <a href="tel:112" className="font-semibold text-primary hover:underline">
-            112 — Police, ambulance, fire
-          </a>
-          <a href="tel:181" className="font-semibold text-primary hover:underline">
-            181 — Women helpline
-          </a>
-          <a href="tel:1091" className="font-semibold text-primary hover:underline">
-            1091 — Women in distress
-          </a>
+      {/* Emergency access.
+          Deliberately NOT wrapped in Reveal. These three numbers must be on the
+          screen the instant it paints — a fade-in, however short, is a delay on
+          the one thing that cannot afford one. */}
+      <div className="mt-6 overflow-hidden rounded-xl border border-destructive/30 bg-destructive/[0.04]">
+        <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/[0.06] px-4 py-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-destructive" aria-hidden />
+          <h2 className="text-xs font-semibold uppercase tracking-wider">
+            If you need help right now
+          </h2>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <div className="grid gap-px bg-destructive/15 sm:grid-cols-3">
+          {[
+            { number: '112', label: 'Police, ambulance, fire' },
+            { number: '181', label: 'Women helpline' },
+            { number: '1091', label: 'Women in distress' },
+          ].map((line) => (
+            <a
+              key={line.number}
+              href={`tel:${line.number}`}
+              className="group flex flex-col bg-card px-4 py-3 transition-colors hover:bg-destructive/[0.06] focus-visible:bg-destructive/[0.06]"
+            >
+              <span className="font-serif text-2xl text-foreground transition-transform duration-150 group-hover:translate-x-0.5">
+                {line.number}
+              </span>
+              <span className="mt-0.5 text-xs text-muted-foreground">{line.label}</span>
+            </a>
+          ))}
+        </div>
+        <p className="px-4 py-2.5 text-xs leading-relaxed text-muted-foreground">
           These reach real services. HerWay cannot call them for you and cannot tell
           anyone where you are.
         </p>
@@ -239,18 +268,36 @@ export default function SafetyCenterPage() {
         </div>
       )}
 
+      {/* Skeleton rather than a line of text: it holds the shape the content
+          will take, so the page does not jump when it arrives. */}
       {loading && (
-        <p role="status" className="mt-8 text-sm text-muted-foreground">
-          Loading your Safety Center…
-        </p>
+        <div role="status" aria-label="Loading your Safety Center" className="mt-10 space-y-8">
+          {[0, 1].map((block) => (
+            <div key={block} className="space-y-3">
+              <div className="skeleton h-4 w-32 rounded" />
+              <div className="skeleton h-24 w-full rounded-xl" />
+              <div className="skeleton h-12 w-full rounded-lg" />
+            </div>
+          ))}
+        </div>
       )}
 
       {!loading && (
         <div className="mt-8">
           {/* ---------------- Check-in ---------------- */}
           <Section title="Check-in">
+            {/* The start-form and the running state replace each other, so they
+                cross-fade rather than both animating in from nothing. */}
+            <AnimatePresence mode="wait" initial={false}>
             {activeCheckIn ? (
-              <div className="rounded-lg border border-border bg-card p-4">
+              <motion.div
+                key="active"
+                variants={fadeUp}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="rounded-xl border border-border bg-card p-4 elevate-1"
+              >
                 <p className="text-sm">
                   Check-in running
                   {activeCheckIn.destination ? ` — ${activeCheckIn.destination}` : ''}.
@@ -283,9 +330,17 @@ export default function SafetyCenterPage() {
                     Prepare a message
                   </button>
                 </div>
-              </div>
+              </motion.div>
             ) : (
-              <form onSubmit={startCheckIn} className="rounded-lg border border-border bg-card p-4">
+              <motion.form
+                key="start"
+                variants={fadeUp}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                onSubmit={startCheckIn}
+                className="rounded-xl border border-border bg-card p-4 elevate-1"
+              >
                 <label className="block text-sm">
                   <span className="mb-1 block font-medium">Where are you going? (optional)</span>
                   <input
@@ -306,8 +361,9 @@ export default function SafetyCenterPage() {
                   A check-in is a note for yourself. HerWay does not track your location
                   and does not alert anyone if you do not come back.
                 </p>
-              </form>
+              </motion.form>
             )}
+            </AnimatePresence>
 
             {checkIns && checkIns.length > 0 && (
               <details className="mt-3">
@@ -327,9 +383,23 @@ export default function SafetyCenterPage() {
           </Section>
 
           {/* ---------------- Share draft ---------------- */}
+          {/* Slides in from the right: it is a panel arriving in response to an
+              action, not content that was always part of the page. The
+              direction carries that meaning. */}
+          <AnimatePresence>
           {draft && (
-            <Section title="Message ready to send">
-              <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
+            <motion.section
+              key="draft"
+              variants={slideInRight}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="mb-10"
+            >
+              <h2 className="mb-3 font-serif text-xl font-normal tracking-tight">
+                Message ready to send
+              </h2>
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4 shadow-sm">
                 <p className="text-xs font-medium">{draft.notice}</p>
                 {draft.recipient_name && (
                   <p className="mt-2 text-sm">To: {draft.recipient_name}</p>
@@ -366,8 +436,9 @@ export default function SafetyCenterPage() {
                   </button>
                 </div>
               </div>
-            </Section>
+            </motion.section>
           )}
+          </AnimatePresence>
 
           {/* ---------------- Plans ---------------- */}
           <Section title="Your plans">
@@ -394,9 +465,20 @@ export default function SafetyCenterPage() {
               </p>
             )}
 
-            <ul className="space-y-3">
-              {plans?.map((plan) => (
-                <li key={plan.id} className="rounded-lg border border-border bg-card p-4">
+            {/* AnimatePresence so a deleted plan fades and collapses rather
+                than vanishing — the list staying still underneath makes it
+                clear which one went. */}
+            <motion.ul layout className="space-y-3">
+              <AnimatePresence initial={false}>
+              {plans?.map((plan, index) => (
+                <motion.li
+                  key={plan.id}
+                  layout
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0, transition: { delay: index * 0.045 } }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0, transition: { duration: 0.18 } }}
+                  className="overflow-hidden rounded-xl border border-border bg-card p-4 elevate-1 transition-colors hover:border-primary/30"
+                >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <h3 className="font-semibold">{plan.title}</h3>
@@ -443,9 +525,10 @@ export default function SafetyCenterPage() {
                       </p>
                     </div>
                   )}
-                </li>
+                </motion.li>
               ))}
-            </ul>
+              </AnimatePresence>
+            </motion.ul>
           </Section>
 
           {/* ---------------- Contacts ---------------- */}
@@ -482,11 +565,16 @@ export default function SafetyCenterPage() {
                 No contacts saved.
               </p>
             ) : (
-              <ul className="space-y-2">
-                {contacts?.map((contact) => (
-                  <li
+              <motion.ul layout className="space-y-2">
+                <AnimatePresence initial={false}>
+                {contacts?.map((contact, index) => (
+                  <motion.li
                     key={contact.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 text-sm"
+                    layout
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0, transition: { delay: index * 0.04 } }}
+                    exit={{ opacity: 0, height: 0, marginBottom: 0, transition: { duration: 0.18 } }}
+                    className="flex flex-wrap items-center justify-between gap-2 overflow-hidden rounded-lg border border-border bg-card p-3 text-sm transition-colors hover:border-primary/30"
                   >
                     <span>
                       {contact.display_name}
@@ -505,9 +593,10 @@ export default function SafetyCenterPage() {
                     >
                       Remove
                     </button>
-                  </li>
+                  </motion.li>
                 ))}
-              </ul>
+                </AnimatePresence>
+              </motion.ul>
             )}
           </Section>
 

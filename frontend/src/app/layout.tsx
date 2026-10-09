@@ -3,6 +3,9 @@ import './globals.css';
 import { Inter, Playfair_Display } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
 import Navbar from '@/components/Navbar';
+import Atmosphere from '@/components/Atmosphere';
+import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar';
+import MotionProvider from '@/components/MotionProvider';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from 'react-hot-toast';
 
@@ -42,10 +45,16 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <div className="min-h-screen flex flex-col">
-              <Navbar />
-              <main className="flex flex-1 flex-col">{children}</main>
-            </div>
+            {/* The signature layer — see Atmosphere.tsx. Mounted once here so
+                every page sits on the same surface. */}
+            <Atmosphere />
+            <ServiceWorkerRegistrar />
+            <MotionProvider>
+              <div className="min-h-screen flex flex-col">
+                <Navbar />
+                <main className="flex flex-1 flex-col">{children}</main>
+              </div>
+            </MotionProvider>
             <Toaster
               toastOptions={{
                 style: {
