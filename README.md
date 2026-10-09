@@ -75,6 +75,48 @@ These are enforced in code and asserted in tests, not aspirations.
 
 ---
 
+## 🎨 Interface
+
+**Type** — Playfair Display for headings, Inter for everything else. Editorial
+rather than SaaS: rose primary on warm ivory, deep plum in dark mode.
+
+**Signature** — a fine grain field over a soft rose-and-plum wash, mounted once
+at the root so every page sits on the same surface
+([`Atmosphere.tsx`](frontend/src/components/Atmosphere.tsx)). Grain was chosen
+over the blur-blob / mesh-gradient look precisely because that look is now the
+default on every AI-assembled site; this reads as printed paper, which is what
+lets it sit with Playfair instead of fighting it.
+
+**Depth** — `elevate-1/2/3` in `globals.css`: layered shadows tinted plum rather
+than grey, so they belong to the palette. In dark mode, where a shadow cannot
+darken anything, depth comes from a hairline of light along the top edge.
+
+**Motion** — [`lib/motion.ts`](frontend/src/lib/motion.ts) and
+[`motion/Reveal.tsx`](frontend/src/components/motion/Reveal.tsx). Calm by rule:
+nothing bouncy, nothing over 400ms, travel ≤16px. Springy overshoot reads as
+playful, and a woman checking whether a shelter is open does not need playful.
+
+> **Emergency UI never animates in.** Helpline numbers, Quick Exit and the
+> safety banner render the instant the page paints. A fade-in, however short, is
+> a delay on the one thing that cannot afford one. `INSTANT` in `lib/motion.ts`
+> marks this as a deliberate exclusion rather than an oversight.
+
+`MotionProvider` sets `reducedMotion="user"` app-wide and `globals.css` handles
+the CSS half, so an OS-level request for less motion is honoured everywhere.
+
+**Navigation** — four destinations (Home · Safety Center · My Cases ·
+Community), with the named tools under **Support**, each labelled by what it
+does. "LawBot" and "Talk to Niva" mean nothing to a first-time visitor.
+
+**Niva's avatar** — the 3D model is framed from its own bounding box rather than
+hardcoded coordinates, and morph-target names are resolved across ARKit, VRM,
+Blender and marketplace conventions. Any GLB dropped at
+`frontend/public/models/avatar.glb` will frame and animate correctly; one
+without expression shapes falls back to procedural head motion rather than
+freezing. The console logs what it detected on load.
+
+---
+
 ## 🏗️ System architecture
 
 ```mermaid
@@ -276,7 +318,49 @@ actually supplied.
 > absence of negative news is never treated as evidence of safety. Ratings are
 > labelled as customer experience, not personal safety.
 
-### 9. Safety & privacy
+### 9. Offline emergency numbers
+
+A service worker makes **112, 181, 1091, 1930, 1098 and 14416** survive having
+no data, no credit or no signal. Losing connectivity degrades to the screen that
+matters most instead of a browser error page. Calling needs phone signal, not
+internet.
+
+The privacy design matters more here than the caching. A cache is a file on
+disk that someone else may look through, so it caches **nothing but the offline
+card and static build assets** — no API responses, no HTML pages. A cached copy
+of a safety plan must not outlive the tab.
+
+The trade-off is deliberate: the app does not work offline beyond the helplines.
+See [`frontend/public/sw.js`](frontend/public/sw.js).
+
+### 10. Speak instead of typing
+
+Dictation in **English, हिंदी, मराठी, বাংলা, தமிழ் and తెలుగు**, using the
+browser's own Web Speech API. Typing out what happened is hardest exactly when
+someone is most upset, and harder again in a second language — many users think
+in Hindi and type in English only because the box expects it.
+
+Audio never leaves the device: the browser does the conversion and HerWay
+receives only the text the user keeps. The control renders only where it will
+actually work, so there is no dead button on browsers without support.
+
+### 11. Did this resource actually work?
+
+HerWay can say a number came from an official page. It cannot say whether anyone
+picks up. Every listing on `/discover` takes an anonymous report — *reached
+someone · nobody answered · wrong number · office moved · not the right help*.
+
+**No feedback record has an owner.** No user id, no session, no case, no trace
+id, and day-granularity dates only — it is a counter on a resource, stored as an
+`$inc` rather than an event log, because arrival order plus timestamps is enough
+to correlate a report back to a session. Reporting on a shelter implies you
+contacted one; that link must not exist.
+
+Outcomes are about **reachability, not quality** — a star rating beside a
+shelter would read as a safety verdict, which HerWay does not make. Counts are
+labelled "reported by people who tried this, HerWay has not re-checked it".
+
+### 12. Safety & privacy
 
 - **Quick Exit** — sticky button plus a global `ESC` listener, redirecting
   immediately. The tooltip and [`/privacy`](frontend/src/app/privacy/page.tsx)
@@ -354,6 +438,7 @@ Haven-main/
 │   │   ├── place_research.py        # Place profiles, review themes, comparison
 │   │   ├── action_workflow.py       # do now / next / alternatives / save / share
 │   │   ├── safety_center_repository.py  # Owner-scoped persistence
+│   │   ├── resource_feedback.py     # Anonymous "did this work?" counters
 │   │   └── steganography_service.py
 │   ├── utils/                       # embedding · steganography · text_llm
 │   ├── auth.py                      # Clerk JWKS + anonymous session isolation
@@ -362,7 +447,7 @@ Haven-main/
 │   ├── safety_triage.py             # Deterministic urgency — no LLM needed
 │   ├── rate_limit.py                # Per-caller budgets (in-process)
 │   ├── db.py  logger.py  main.py  prompts.py  schema.py
-│   ├── tests/                       # 551 tests
+│   ├── tests/                       # 591 tests
 │   └── requirements.txt
 │
 ├── frontend/
@@ -380,6 +465,11 @@ Haven-main/
 │   │   │   ├── privacy/             # What this does and does not protect
 │   │   │   └── page.tsx             # Homepage & intake
 │   │   ├── components/
+│   │   │   ├── Atmosphere.tsx       # Grain + wash — the signature layer
+│   │   │   ├── MotionProvider.tsx   # reducedMotion="user", app-wide
+│   │   │   ├── motion/Reveal.tsx    # Reveal · Stagger · StaggerItem
+│   │   │   ├── VoiceInput.tsx       # Web Speech dictation, 6 languages
+│   │   │   ├── ResourceFeedback.tsx # Anonymous "did this work?"
 │   │   │   ├── EvidenceCard.tsx     # Source transparency
 │   │   │   ├── ResourceCard.tsx     # Provenance-labelled resources
 │   │   │   ├── LocationPrompt.tsx   # State/UT/PIN picker
@@ -392,6 +482,8 @@ Haven-main/
 │   │       ├── india.ts             # Phone / date / INR / regions
 │   │       ├── server-auth.ts       # Server-side Clerk token
 │   │       └── types.ts
+│   ├── public/sw.js                 # Offline helplines service worker
+│   ├── public/offline.html          # 112/181/1930 with no network
 │   └── public/models/avatar.glb
 │
 ├── docs/
@@ -546,13 +638,23 @@ attaches the Clerk token server-side.
 ## 🧪 Testing
 
 ```bash
-# Backend — 551 tests
+# Backend — 591 tests
 backend/.venv/Scripts/python.exe -m pytest backend/tests -q     # Windows
 python -m pytest backend/tests -q                               # macOS / Linux
 
 # Frontend
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 ```
+
+> **If a dev server is running, do not use `npm run build`.** Both write to
+> `frontend/.next/`, so the production build replaces the chunks the running
+> server is serving and the browser fails with `ChunkLoadError`. Build into a
+> separate directory instead — `next build` has no `--distDir` flag, so it is
+> wired to an env var in `next.config.ts`:
+>
+> ```bash
+> NEXT_DIST_DIR=.next-verify npx next build && rm -rf .next-verify
+> ```
 
 **Almost every test is offline.** The suite exercises code paths, contracts and
 failure handling — it does **not** demonstrate that Gemini, MongoDB or Atlas
@@ -587,7 +689,7 @@ rules in-process.
 
 ## 📡 API reference
 
-**62 endpoints.** Swagger at `http://localhost:8000/docs` is generated from the
+**65 endpoints.** Swagger at `http://localhost:8000/docs` is generated from the
 code and is always authoritative; the tables below are the curated subset.
 
 | Group | Count |
@@ -596,7 +698,7 @@ code and is always authoritative; the tables below are the curated subset.
 | `/api/v2/cases` | 11 |
 | `/api/v2/discover` | 5 |
 | `/api/v2/research` · `/api/v2/discreet` | 3 each |
-| `/api/v2/resources` | 2 |
+| `/api/v2/resources` | 5 |
 | `/api/v2/chat` | 1 |
 | Original Haven endpoints (root) | 15 |
 
@@ -633,6 +735,9 @@ code and is always authoritative; the tables below are the curated subset.
 | `GET` | `/api/v2/discreet/limitations` | What steganography does and does not protect |
 | `GET` | `/api/v2/resources/national` | Helplines + portals, each with its official source URL. `?category=` |
 | `GET` | `/api/v2/resources/regions` | Indian states and union territories |
+| `GET` | `/api/v2/resources/feedback-options` | The outcomes a user can report |
+| `POST` | `/api/v2/resources/feedback` | Report that a resource worked, or did not. **Anonymous — takes no identity and stores none.** |
+| `GET` | `/api/v2/resources/feedback` | What others have reported about one resource |
 | `GET` | `/health` | Status, database mode, per-integration availability |
 
 ### Local discovery — `/api/v2/discover`
@@ -826,7 +931,7 @@ because the environment this was built in could not reach them:
 - **Safety plan quality has not been reviewed by a DV professional.** Prompts
   enforce structure and the no-confrontation mandate, but expert review is
   needed before real-world use.
-- **No CI.** 551 tests, nothing runs them automatically.
+- **No CI.** 591 tests, nothing runs them automatically.
 - **No automated frontend tests** — there is no test runner in the frontend.
 - `google-generativeai` is deprecated upstream; migration to `google-genai` is
   pending. Two model retirements have already broken this app.
