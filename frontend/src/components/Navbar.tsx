@@ -51,6 +51,7 @@ function Navbar() {
     { href: '/therapybot', label: 'Talk to Niva', hint: 'Someone to talk to, any time' },
     { href: '/discover', label: 'Find places', hint: 'Services and help near you' },
     { href: '/discreet-message', label: 'Discreet message', hint: 'Hide a message in a photo' },
+    { href: '/how-it-works', label: 'How it works', hint: 'The pipeline, the sources, the limits' },
   ];
 
   const supportActive = supportLinks.some((link) => pathname === link.href);
@@ -158,18 +159,40 @@ function Navbar() {
 
       {/* Right side actions */}
       <div className="flex items-center gap-2">
-        {/* Quick Exit — always visible, safety critical */}
+        {/* Quick exit — discreet by design, still always present. */}
         <div className="relative group">
           <button
             suppressHydrationWarning
             onClick={handleQuickExit}
-            aria-label="Quick exit — leave this page immediately (also press Escape)"
+            aria-label="Leave this page immediately (also press Escape)"
             title="Leave this page immediately. Press Escape at any time."
-            className="px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs rounded-md transition-colors flex items-center gap-1.5"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <span aria-hidden="true">✕</span>
-            <span>Exit</span>
-            <span className="hidden sm:inline text-[10px] opacity-70 font-normal">(ESC)</span>
+            {/* Icon only.
+                This was a filled rose button reading "✕ Exit (ESC)" — the
+                loudest element in the header, which made the whole product
+                look like a warning rather than a tool.
+
+                The capability is unchanged: this still leaves immediately, and
+                Escape still works from anywhere. What changed is that it no
+                longer announces itself — which is also closer to the point of
+                a discreet exit. It is described for screen readers and on
+                /privacy, where its real limits are stated. */}
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 15 15"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M9 2H12.5V12.5H9" />
+              <path d="M6.5 10.5L9.5 7.5L6.5 4.5" />
+              <path d="M9.5 7.5H2" />
+            </svg>
           </button>
           {/* Tooltip */}
           <div

@@ -83,6 +83,10 @@ class CaseCreate(BaseModel):
     title: Optional[str] = Field(
         None, max_length=120, description="Optional caller-supplied title"
     )
+    #: Set by the demo scenario runner. Only marks a case as a sample — it
+    #: grants nothing and changes no authorisation, so accepting it from
+    #: the client is safe. Ownership still comes from the session.
+    demo_scenario_id: Optional[str] = Field(None, max_length=64)
 
 
 class CaseUpdate(BaseModel):
@@ -103,6 +107,12 @@ class Case(BaseModel):
     category: str = Field("other", description="Primary category")
     situation_text: str
     status: CaseStatus = CaseStatus.ACTIVE
+    #: True when this case came from a demonstration scenario. Persisted
+    #: rather than inferred, so a demo case is identifiable in storage and
+    #: in any export — not only in the UI that happened to create it.
+    is_demo: bool = False
+    #: Which scenario produced it, for the UI to show what is being shown.
+    demo_scenario_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

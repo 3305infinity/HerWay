@@ -145,6 +145,12 @@ export interface ResearchTraceEntry {
   time_taken_ms: number;
   is_cached?: boolean;
   freshness_policy?: string;
+  /** SerpApi's own engine id — google · google_news · google_maps. */
+  provider_engine?: string | null;
+  /** When the data was fetched. On a cache hit this is the ORIGINAL fetch. */
+  retrieved_at?: string | null;
+  /** live · cache · snapshot · unavailable. Snapshot is never a live result. */
+  data_origin?: 'live' | 'cache' | 'snapshot' | 'unavailable';
   success: boolean;
   error?: string | null;
 }
@@ -191,6 +197,9 @@ export interface CaseRecord {
   category: string;
   situation_text: string;
   status: string;
+  /** True when this case came from a demonstration scenario, not a real report. */
+  is_demo?: boolean;
+  demo_scenario_id?: string | null;
   created_at: string;
   updated_at: string;
   situation?: Situation | null;

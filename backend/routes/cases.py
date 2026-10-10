@@ -30,6 +30,7 @@ from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from backend.demo_scenarios import demo_title, get_scenario
 from backend.auth import Identity, assert_case_owner, get_identity, owner_filter
 from backend.db import get_database
 from backend.models.case import Case, CaseCreate, CaseStatus, CaseUpdate, ensure_case_indexes
@@ -101,17 +102,42 @@ async def create_case(
     """Create a new case owned by the authenticated caller or their session."""
     collection = _get_collection()
 
+    # Resolve the demo scenario, if one was named. Looking it up rather than
+    # trusting the string means an unknown id simply produces an ordinary case
+    # instead of writing an arbitrary value onto the record.
+    demo_scenario = (
+        get_scenario(payload.demo_scenario_id) if payload.demo_scenario_id else None
+    )
+
     now = datetime.utcnow()
     doc = {
         # Ownership comes from the server, never from the request body.
         "user_id": identity.owner_id,
         "owner_kind": identity.kind,
-        "title": payload.title or _derive_title(payload.situation_text),
+        "title": (
+            demo_title(demo_scenario)
+            if demo_scenario
+            else (payload.title or _derive_title(payload.situation_text))
+        ),
         "category": payload.category or "other",
         "situation_text": payload.situation_text,
         "location": payload.location.model_dump() if payload.location else None,
         "location_context": payload.location.display_name if payload.location else None,
         "status": CaseStatus.ACTIVE.value,
+        # Demo provenance, persisted.
+        #
+        # A demo case is a *real* case: owned by the session that ran it,
+        # processed by the ordinary pipeline, deletable like any other. The
+        # only difference is that its text came from a written scenario rather
+        # than from the user, and that needs to be visible in storage — not
+        # only in the screen that created it — so a sample can never be
+        # mistaken for someone's actual report.
+        #
+        # The id is validated against the known scenarios; an unrecognised
+        # value is discarded rather than stored, so this cannot be used to
+        # write arbitrary strings onto a case.
+        "is_demo": demo_scenario is not None,
+        "demo_scenario_id": demo_scenario.id if demo_scenario else None,
         "created_at": now,
         "updated_at": now,
         "conversation": [],

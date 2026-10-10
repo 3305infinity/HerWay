@@ -534,6 +534,34 @@ class SerpApiCache:
         )
         return results
 
+    def cached_at(
+        self,
+        query: str,
+        vertical: str,
+        location: Optional[str],
+        country: Optional[str],
+        language: Optional[str],
+        page: int = 1,
+    ):
+        """When this entry was originally written, or ``None``.
+
+        Lets a cache hit report the real fetch time rather than the time of the
+        request that happened to read it — otherwise hour-old data is presented
+        as seconds old, which is precisely the kind of quiet inaccuracy this
+        product cannot afford.
+        """
+        from datetime import datetime, timezone
+
+        key = make_cache_key(query, vertical, location, country, language, page)
+        try:
+            raw = self._backend.get(key)
+        except Exception:
+            return None
+        if raw is None:
+            return None
+        written = cached_at_of(raw)
+        return datetime.fromtimestamp(written, tz=timezone.utc) if written else None
+
     def set(
         self,
         query: str,

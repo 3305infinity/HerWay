@@ -22,6 +22,7 @@ Key Capabilities
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 import logging
 import os
 import time
@@ -75,6 +76,23 @@ _INDIA_TERMS = (
     "chandigarh", "ladakh", "kashmir", "andaman", "lakshadweep",
     "posh act", "pwdva", "ipc", "bns", "sakhi", "mahila", "nalsa", "ncw",
 )
+
+
+#: HerWay's internal vertical names mapped to SerpApi's own engine ids.
+#: Defined once so the request builder and the cache path cannot drift apart
+#: and report different engines for the same search.
+_PROVIDER_ENGINES = {
+    "news": "google_news",
+    "google_news": "google_news",
+    "maps": "google_maps",
+    "local": "google_maps",
+    "google_maps": "google_maps",
+}
+
+
+def _provider_engine_for(vertical: str) -> str:
+    """The SerpApi engine id for a vertical. Defaults to plain Google Search."""
+    return _PROVIDER_ENGINES.get((vertical or "web").strip().lower(), "google")
 
 
 def _mentions_india(query: str) -> bool:
@@ -397,6 +415,18 @@ class SerpApiService:
                 success=True,
                 results=cached,
                 from_cache=True,
+                provider_engine=_provider_engine_for(v_name),
+                # Deliberately NOT `now`: this is the time of the original
+                # fetch. Stamping a cache hit with the current time would
+                # present hour-old data as fresh.
+                #
+                # `v_name` — the same vertical the cache lookup above used, so
+                # the key matches. (`v_str` is the live path's local and is not
+                # in scope here.)
+                retrieved_at=self._cache.cached_at(
+                    request.query, v_name, request.location,
+                    request.country, request.language, request.page,
+                ),
             )
 
         # 2. Build HTTP parameters
@@ -520,6 +550,12 @@ class SerpApiService:
             success=True,
             results=results,
             latency_ms=latency_ms,
+            # Provenance: the provider's own engine id, and when this was
+            # actually fetched. Both travel with the results into the research
+            # trail so a reader can see which SerpApi engine produced what, and
+            # how old it is.
+            provider_engine=params.get("engine"),
+            retrieved_at=datetime.now(timezone.utc),
         )
 
     # ------------------------------------------------------------------

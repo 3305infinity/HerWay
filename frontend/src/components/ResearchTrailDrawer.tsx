@@ -25,6 +25,48 @@ interface ResearchTrailDrawerProps {
 }
 
 // Map engine names to human labels
+/**
+ * How old a retrieval is, in words.
+ *
+ * Shown because "when" is half of what makes a source trustworthy: a helpline
+ * number fetched four seconds ago and one read from an hour-old cache entry
+ * are not the same claim, and the user is entitled to tell them apart.
+ */
+function retrievedAgo(iso?: string | null): string | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`;
+  return `${Math.floor(seconds / 86400)} d ago`;
+}
+
+/** Label and styling per data origin. A snapshot is never shown as live. */
+const ORIGIN_BADGE: Record<string, { label: string; className: string; title: string }> = {
+  live: {
+    label: 'Live',
+    className: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400',
+    title: 'Fetched from SerpApi during this request',
+  },
+  cache: {
+    label: 'Cached',
+    className: 'bg-sky-500/12 text-sky-700 dark:text-sky-400',
+    title: 'Real SerpApi data, retrieved earlier and reused instead of paying for it twice',
+  },
+  snapshot: {
+    label: 'Snapshot',
+    className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+    title: 'A saved illustrative example — NOT a live search result',
+  },
+  unavailable: {
+    label: 'Unavailable',
+    className: 'bg-destructive/12 text-destructive',
+    title: 'The search did not complete, so there is no data to attribute',
+  },
+};
+
 function engineLabel(engine: string) {
   const e = engine.toLowerCase();
   if (e.includes('news')) return 'News';
@@ -213,6 +255,25 @@ export default function ResearchTrailDrawer({
                             }`}>
                               {entry.is_cached ? 'Cached' : engineLabel(entry.engine)}
                             </span>
+                            {/* SerpApi's own engine id, so a reader can match
+                                this row to the provider's documentation rather
+                                than to HerWay's internal vertical name. */}
+                            {entry.provider_engine && (
+                              <code
+                                className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
+                                title="SerpApi engine used for this search"
+                              >
+                                {entry.provider_engine}
+                              </code>
+                            )}
+                            {entry.data_origin && ORIGIN_BADGE[entry.data_origin] && (
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${ORIGIN_BADGE[entry.data_origin].className}`}
+                                title={ORIGIN_BADGE[entry.data_origin].title}
+                              >
+                                {ORIGIN_BADGE[entry.data_origin].label}
+                              </span>
+                            )}
                             {entry.is_followup && (
                               <span className="text-[10px] text-muted-foreground">Follow-up</span>
                             )}
@@ -230,6 +291,12 @@ export default function ResearchTrailDrawer({
                               : entry.success
                               ? `${entry.results_found} result${entry.results_found !== 1 ? 's' : ''} · ${Math.round(entry.time_taken_ms)}ms`
                               : 'This search did not complete'}
+                            {retrievedAgo(entry.retrieved_at) && (
+                              <span className="text-muted-foreground">
+                                {' · retrieved '}
+                                {retrievedAgo(entry.retrieved_at)}
+                              </span>
+                            )}
                           </p>
                         </div>
                         <svg

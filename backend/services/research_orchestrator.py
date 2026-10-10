@@ -33,6 +33,7 @@ from urllib.parse import urlparse
 
 from backend.models.case import Location
 from backend.models.research import (
+    DataOrigin,
     EvidenceItem,
     EvidenceStatus,
     FinalResearchReport,
@@ -285,6 +286,9 @@ class ResearchOrchestrator:
                         time_taken_ms=0.0,
                         is_cached=True,
                         is_followup=task.is_followup,
+                        # Nothing was fetched: this query was already answered
+                        # within the same plan.
+                        data_origin=DataOrigin.CACHE,
                         freshness_policy=task.freshness_policy.value if hasattr(task.freshness_policy, "value") else str(task.freshness_policy),
                         success=True,
                     ),
@@ -338,6 +342,16 @@ class ResearchOrchestrator:
                     is_cached=outcome.from_cache,
                     is_followup=task.is_followup,
                     freshness_policy=freshness,
+                    # Provenance, carried from the provider into the trail so
+                    # the UI can say which engine ran, when, and whether the
+                    # data was fetched now or read from cache.
+                    provider_engine=outcome.provider_engine,
+                    retrieved_at=outcome.retrieved_at,
+                    data_origin=(
+                        DataOrigin.CACHE if outcome.from_cache
+                        else DataOrigin.LIVE if outcome.success
+                        else DataOrigin.UNAVAILABLE
+                    ),
                     # A failed vertical is recorded as a failure so the case can
                     # tell the user exactly which part of the research is missing.
                     success=outcome.success,
@@ -360,6 +374,7 @@ class ResearchOrchestrator:
                     is_cached=False,
                     is_followup=task.is_followup,
                     freshness_policy=freshness,
+                    data_origin=DataOrigin.UNAVAILABLE,
                     success=False,
                     error=str(exc),
                 )

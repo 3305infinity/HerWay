@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 
 import { apiPost } from '@/lib/api';
 import VoiceInput from '@/components/VoiceInput';
+import DemoScenarios, { type DemoScenario } from '@/components/DemoScenarios';
 import { ALL_INDIAN_REGIONS, composeLocation } from '@/lib/india';
 import type { CaseRecord, Situation } from '@/lib/types';
 
@@ -62,6 +63,31 @@ export default function Home() {
     window.location.replace('https://www.google.com');
   };
 
+  /**
+   * Which demo scenario, if any, produced the text currently in the box.
+   * Cleared the moment the user edits it: once she has changed the words it is
+   * her situation, not a sample, and must not be filed as one.
+   */
+  const [demoScenarioId, setDemoScenarioId] = useState<string | null>(null);
+
+  const applyDemoScenario = (scenario: DemoScenario) => {
+    setSituationText(scenario.situation_text);
+    setSelectedCategory(scenario.category);
+    setDemoScenarioId(scenario.id);
+    if (scenario.location) {
+      const [cityPart, statePart] = scenario.location.split(',').map((p) => p.trim());
+      if (statePart) {
+        setCity(cityPart);
+        setStateRegion(statePart);
+      } else {
+        setStateRegion(cityPart);
+      }
+    }
+    document
+      .getElementById('situation-textarea')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (situationText.trim().length < 10) return;
@@ -78,6 +104,9 @@ export default function Home() {
       situation_text: situationText,
       category: selectedCategory,
       location: location ? { display_name: location } : null,
+      // Server-validated against the known scenarios; an unknown value simply
+      // produces an ordinary case.
+      demo_scenario_id: demoScenarioId,
     });
 
     if (!created.ok) {
@@ -385,6 +414,11 @@ export default function Home() {
           <div className="mt-10 grid grid-cols-1 gap-8 lg:mt-12 lg:grid-cols-12 lg:gap-10">
             <div className="space-y-6 lg:col-span-7">
 
+          {/* Prepared scenarios. Collapsed, and below the question — someone
+              arriving with a real situation should not have to scroll past
+              four fictional ones to reach the box. */}
+          <DemoScenarios onPick={applyDemoScenario} />
+
           {/* The category list used to be its own section immediately above
               this one — two templated blocks doing the same job, asking you to
               start twice. Folded in here as an optional way in, so there is one
@@ -531,7 +565,12 @@ export default function Home() {
                 id="situation-textarea"
                 rows={7}
                 value={situationText}
-                onChange={(e) => setSituationText(e.target.value)}
+                onChange={(e) => {
+                  setSituationText(e.target.value);
+                  // Once she has changed the words it is her situation, not a
+                  // demo, and must not be filed as one.
+                  if (demoScenarioId) setDemoScenarioId(null);
+                }}
                 placeholder="You can start anywhere — what happened, when it started, or just how it has been feeling."
                 className="custom-scrollbar w-full resize-y rounded-xl border border-input bg-background p-4 text-[15px] leading-relaxed text-foreground transition-all placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
               />

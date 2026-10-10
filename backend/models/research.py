@@ -319,6 +319,12 @@ class SearchOutcome(BaseModel):
     error_message: Optional[str] = None
     latency_ms: float = 0.0
     from_cache: bool = False
+    #: The SerpApi engine id actually requested, so the trace can report the
+    #: provider's own name rather than HerWay's internal vertical label.
+    provider_engine: Optional[str] = None
+    #: When the data was fetched. On a cache hit this is the original fetch
+    #: time, not now — otherwise stale data would be presented as fresh.
+    retrieved_at: Optional[datetime] = None
 
     @property
     def is_empty_but_successful(self) -> bool:
@@ -442,12 +448,44 @@ class ResearchPlan(BaseModel):
         return self.tasks
 
 
+class DataOrigin(str, Enum):
+    """Where a result actually came from.
+
+    ``is_cached`` already said whether a search was served from the cache, but
+    "cached" and "live" are not the only possibilities, and conflating them
+    with a saved snapshot would let illustrative data be shown as a live
+    finding. These are kept distinct so the UI can label each honestly.
+    """
+
+    #: Fetched from SerpApi during this request.
+    LIVE = "live"
+    #: Served from the shared cache — real SerpApi data, retrieved earlier.
+    CACHE = "cache"
+    #: A saved illustrative example. **Never** a live result, and labelled as
+    #: such everywhere it appears.
+    SNAPSHOT = "snapshot"
+    #: The search did not complete, so there is no data to attribute.
+    UNAVAILABLE = "unavailable"
+
+
 class ResearchTraceEntry(BaseModel):
     """Per-case trace entry recorded during execution for transparency."""
     task_id: str
     why_searched: str
     query: str
     engine: str
+    #: The SerpApi engine actually called, e.g. ``google``, ``google_news``,
+    #: ``google_maps``. ``engine`` above is HerWay's internal vertical name;
+    #: this is the provider's, so a reader can match it to SerpApi's docs.
+    provider_engine: Optional[str] = Field(
+        None, description="SerpApi engine id actually used"
+    )
+    #: When this result was retrieved. For a cache hit this is the time of the
+    #: *original* fetch, not of this request — otherwise an hour-old result
+    #: would appear to be seconds old.
+    retrieved_at: Optional[datetime] = None
+    #: live | cache | snapshot | unavailable. See DataOrigin.
+    data_origin: DataOrigin = DataOrigin.LIVE
     results_found: int
     sources_used: int = Field(0, description="Number of results selected and verified")
     selected_urls: List[str] = Field(default_factory=list, description="URLs of evidence extracted from this search")
