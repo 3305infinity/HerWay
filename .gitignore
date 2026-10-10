@@ -1,6 +1,6 @@
 .vscode
 .venv
-
+.env
 backend/.env
 google-api.json
 backend/encoded_image.png
