@@ -22,6 +22,8 @@ interface ResearchTrailDrawerProps {
   /** The location actually searched, or null if the user gave none. */
   locationUsed?: string | null;
   hasPlan?: boolean;
+  /** 'scripted' when the questions were pre-written rather than agent-chosen. */
+  planOrigin?: 'llm' | 'scripted';
 }
 
 // Map engine names to human labels
@@ -82,13 +84,32 @@ export default function ResearchTrailDrawer({
   degradations = [],
   locationUsed = null,
   hasPlan = false,
+  planOrigin = 'llm',
 }: ResearchTrailDrawerProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   if (!isOpen) return null;
 
+  const scriptedPlan = planOrigin === 'scripted';
   const successCount = trace.filter((t) => t.success && !t.is_cached).length;
   const failedCount = trace.filter((t) => !t.success).length;
+
+  /* Shown when the planner was unavailable and an example case fell back to
+     written questions. The distinction matters: the searches below are live
+     and the sources are real, but no agent chose them — and the UI must not
+     let a reviewer believe otherwise. */
+  const scriptedNotice = scriptedPlan ? (
+    <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+      <p className="text-[11px] font-medium text-amber-800 dark:text-amber-300">
+        These search questions were written in advance, not chosen by an agent.
+      </p>
+      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+        The research planner was unavailable, so this example used its prepared
+        questions. Everything below still ran live — the results, links and
+        timestamps are real.
+      </p>
+    </div>
+  ) : null;
   const cachedCount = trace.filter((t) => t.is_cached).length;
   const totalMs = trace.reduce((acc, t) => acc + (t.time_taken_ms || 0), 0);
 
@@ -177,6 +198,10 @@ export default function ResearchTrailDrawer({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
+
+          {/* Shown before anything else when the plan was pre-written, so a
+              reviewer reads the caveat before the findings. */}
+          {scriptedNotice && <div className="px-5 pt-5">{scriptedNotice}</div>}
 
           {/* Research journey — simplified steps */}
           <div className="p-5 border-b border-border/50">

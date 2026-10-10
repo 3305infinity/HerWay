@@ -1278,6 +1278,7 @@ export default function CaseWorkspacePage() {
         degradations={degradations}
         locationUsed={caseData.research_location_used ?? knownLocation}
         hasPlan={Boolean(safetyPlan) || (actionPlan?.actions?.length ?? 0) > 0}
+        planOrigin={caseData.research_plan?.plan_origin ?? 'llm'}
       />
     </div>
   );

@@ -440,6 +440,11 @@ class ResearchPlan(BaseModel):
     reasoning: str = Field("", description="Overview of search strategy")
     tasks: List[ResearchTask] = Field(default_factory=list)
     search_budget: int = Field(4, description="Max allowed search tasks for this plan")
+    #: "llm" when an agent chose these searches, "scripted" when they came from
+    #: a written example because the planner was unavailable. The searches
+    #: themselves are live either way — this says who picked the questions, so
+    #: the UI never implies an agent reasoned when it did not.
+    plan_origin: str = Field("llm", description="llm | scripted")
     iteration: int = Field(1, description="Planning iteration number")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

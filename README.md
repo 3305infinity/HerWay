@@ -107,6 +107,10 @@ the CSS half, so an OS-level request for less motion is honoured everywhere.
 **Navigation** — four destinations (Home · Safety Center · My Cases ·
 Community), with the named tools under **Support**, each labelled by what it
 does. "LawBot" and "Talk to Niva" mean nothing to a first-time visitor.
+[`/how-it-works`](frontend/src/app/how-it-works/page.tsx) lives there too: the
+seven pipeline steps, which engine retrieves what and why, the stack with
+**live status read from `/health`**, and a plain list of what HerWay does not
+do.
 
 **Niva's avatar** — the 3D model is framed from its own bounding box rather than
 hardcoded coordinates, and morph-target names are resolved across ARKit, VRM,
@@ -360,11 +364,69 @@ Outcomes are about **reachability, not quality** — a star rating beside a
 shelter would read as a safety verdict, which HerWay does not make. Counts are
 labelled "reported by people who tried this, HerWay has not re-checked it".
 
-### 12. Safety & privacy
+### 12. Example situations
 
-- **Quick Exit** — sticky button plus a global `ESC` listener, redirecting
-  immediately. The tooltip and [`/privacy`](frontend/src/app/privacy/page.tsx)
-  state plainly that it **cannot** erase browser history.
+Four written situations on the home page — a late-night journey, workplace
+harassment, online blackmail, and an unfamiliar area — that run through the
+**real** pipeline in one click.
+
+There is no demo endpoint and no mock dashboard. Picking one fills the ordinary
+situation box with its text; you still press Continue, and what follows is the
+same situation analysis, research planning and live search everyone else gets.
+The case it creates is a real case: owned by your session, processed normally,
+and deletable.
+
+| Property | How |
+|---|---|
+| Nothing is seeded | No startup writes. A test asserts importing the module creates zero rows. |
+| Labelled in storage | `is_demo` and `demo_scenario_id` persist on the case, plus an `Example:` title prefix — so a sample is identifiable in the database and in an export, not just in the UI that made it. |
+| Scoped like any case | Cross-session access returns 403. Verified live. |
+| Editing clears the label | Once you change the words it is your situation, not a sample. |
+| Server-validated | The scenario id is looked up, not trusted — an unknown value produces an ordinary case. |
+
+**When the AI planner is unavailable**, an example falls back to pre-written
+search questions and keeps going. Only the *question* is scripted — the
+searches are ordinary live SerpApi calls returning real results, links and
+timestamps. The research trail says so before showing any finding:
+
+> *"These search questions were written in advance, not chosen by an agent.
+> Everything below still ran live."*
+
+This fallback applies **only to examples**. A real case with the same outage
+gets an honest 429 — someone describing her own situation deserves real
+analysis or a truthful outage, not a stand-in that looks like understanding.
+
+### 13. Search provenance
+
+Every row in the research trail carries where its data actually came from:
+
+| Badge | Means |
+|---|---|
+| **Live** | Fetched from SerpApi during this request |
+| **Cached** | Real SerpApi data, retrieved earlier and reused |
+| **Snapshot** | A saved illustrative example — **never** a live result |
+| **Unavailable** | The search did not complete; nothing to attribute |
+
+Alongside it: SerpApi's own engine id (`google`, `google_news`, `google_maps`),
+so a row can be matched to the provider's documentation rather than to HerWay's
+internal vertical names — and how old the data is.
+
+**A cache hit reports the original fetch time, not the moment it was read.**
+Stamping it with `now` would present hour-old data as fresh. `data_origin` is
+an enum rather than a boolean specifically so a snapshot can never be reported
+as live.
+
+> Nothing currently populates `snapshot`. There are no saved results in this
+> repository by design — everything shown is live or cached.
+
+### 14. Safety & privacy
+
+- **Quick Exit** — a discreet icon in the header plus a global `ESC` listener,
+  redirecting immediately. Deliberately quiet rather than a labelled alarm
+  button: a loud "✕ EXIT" is both the wrong first impression for a product and
+  the wrong thing to have on screen if someone is looking over your shoulder.
+  The accessible label and [`/privacy`](frontend/src/app/privacy/page.tsx) state
+  plainly that it **cannot** erase browser history.
 - **Emergency banner** — 112, 181, 1091 across the safety-relevant pages.
 - **Anonymous by default** — no account required. Each browser gets its own
   isolated session, so anonymous users cannot see each other's cases.
@@ -424,6 +486,7 @@ Haven-main/
 │   │   ├── research.py              # /api/v2/research/*
 │   │   ├── resources.py             # /api/v2/resources/*  (helplines, regions)
 │   │   ├── discover.py              # /api/v2/discover/*   (local intelligence)
+│   │   ├── demo.py                  # /api/v2/demo/scenarios
 │   │   ├── safety_center.py         # /api/v2/safety-center/*
 │   │   └── legacy.py                # Original root endpoints
 │   ├── services/
@@ -443,11 +506,12 @@ Haven-main/
 │   ├── utils/                       # embedding · steganography · text_llm
 │   ├── auth.py                      # Clerk JWKS + anonymous session isolation
 │   ├── india_resources.py           # Attributed registry & source hierarchy
+│   ├── demo_scenarios.py            # Four example situations + scripted fallback
 │   ├── trace.py                     # Request-scoped trace IDs (contextvars)
 │   ├── safety_triage.py             # Deterministic urgency — no LLM needed
 │   ├── rate_limit.py                # Per-caller budgets (in-process)
 │   ├── db.py  logger.py  main.py  prompts.py  schema.py
-│   ├── tests/                       # 591 tests
+│   ├── tests/                       # 638 tests
 │   └── requirements.txt
 │
 ├── frontend/
@@ -462,12 +526,14 @@ Haven-main/
 │   │   │   ├── lawbot/  therapybot/ post/[id]/  dashboard/
 │   │   │   ├── safety-center/       # Plans, contacts, check-ins
 │   │   │   ├── discover/            # Find and compare places
+│   │   │   ├── how-it-works/        # Pipeline, engines, stack, limits
 │   │   │   ├── privacy/             # What this does and does not protect
 │   │   │   └── page.tsx             # Homepage & intake
 │   │   ├── components/
 │   │   │   ├── Atmosphere.tsx       # Grain + wash — the signature layer
 │   │   │   ├── MotionProvider.tsx   # reducedMotion="user", app-wide
 │   │   │   ├── motion/Reveal.tsx    # Reveal · Stagger · StaggerItem
+│   │   │   ├── DemoScenarios.tsx    # Example situations picker
 │   │   │   ├── VoiceInput.tsx       # Web Speech dictation, 6 languages
 │   │   │   ├── ResourceFeedback.tsx # Anonymous "did this work?"
 │   │   │   ├── EvidenceCard.tsx     # Source transparency
@@ -638,7 +704,7 @@ attaches the Clerk token server-side.
 ## 🧪 Testing
 
 ```bash
-# Backend — 591 tests
+# Backend — 638 tests
 backend/.venv/Scripts/python.exe -m pytest backend/tests -q     # Windows
 python -m pytest backend/tests -q                               # macOS / Linux
 
@@ -689,7 +755,7 @@ rules in-process.
 
 ## 📡 API reference
 
-**65 endpoints.** Swagger at `http://localhost:8000/docs` is generated from the
+**66 endpoints.** Swagger at `http://localhost:8000/docs` is generated from the
 code and is always authoritative; the tables below are the curated subset.
 
 | Group | Count |
@@ -735,6 +801,7 @@ code and is always authoritative; the tables below are the curated subset.
 | `GET` | `/api/v2/discreet/limitations` | What steganography does and does not protect |
 | `GET` | `/api/v2/resources/national` | Helplines + portals, each with its official source URL. `?category=` |
 | `GET` | `/api/v2/resources/regions` | Indian states and union territories |
+| `GET` | `/api/v2/demo/scenarios` | The four example situations. Public — static prose, no user content. |
 | `GET` | `/api/v2/resources/feedback-options` | The outcomes a user can report |
 | `POST` | `/api/v2/resources/feedback` | Report that a resource worked, or did not. **Anonymous — takes no identity and stores none.** |
 | `GET` | `/api/v2/resources/feedback` | What others have reported about one resource |
@@ -931,7 +998,7 @@ because the environment this was built in could not reach them:
 - **Safety plan quality has not been reviewed by a DV professional.** Prompts
   enforce structure and the no-confrontation mandate, but expert review is
   needed before real-world use.
-- **No CI.** 591 tests, nothing runs them automatically.
+- **No CI.** 638 tests, nothing runs them automatically.
 - **No automated frontend tests** — there is no test runner in the frontend.
 - `google-generativeai` is deprecated upstream; migration to `google-genai` is
   pending. Two model retirements have already broken this app.

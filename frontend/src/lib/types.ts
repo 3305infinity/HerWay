@@ -190,6 +190,20 @@ export interface LocalResource {
   relevance_reason?: string;
 }
 
+/**
+ * The research plan stored on a case.
+ *
+ * Only the fields the UI reads. `plan_origin` says whether an agent chose the
+ * searches or they came from a written example because the planner was
+ * unavailable — the trail shows that caveat so live results are never
+ * presented as agent reasoning.
+ */
+export interface ResearchPlan {
+  plan_origin?: 'llm' | 'scripted';
+  reasoning?: string;
+  search_budget?: number;
+}
+
 export interface CaseRecord {
   id: string;
   user_id?: string;
@@ -208,6 +222,7 @@ export interface CaseRecord {
   action_plan?: ActionPlan | null;
   safety_plan?: SafetyPlan | null;
   local_resources?: LocalResource[];
+  research_plan?: ResearchPlan | null;
   research_trace?: ResearchTraceEntry[];
   research_degradations?: ResearchDegradation[];
   research_location_used?: string | null;

@@ -27,6 +27,12 @@ from backend.agents.source_verifier import SourceVerifier
 from backend.auth import Identity, assert_case_owner, get_identity, owner_filter
 from backend.db import get_database
 from backend.models.case import CaseStatus, Location
+from backend.demo_scenarios import (
+    get_scenario,
+    scripted_research_plan,
+    situation_from_scenario,
+)
+from backend.trace import log_fields
 from backend.services.llm_service import (
     LLMService,
     LLMUnavailableError,
@@ -101,25 +107,56 @@ async def run_pipeline(case_id: str, identity: Identity = Depends(get_identity))
     maps_service = MapsService(serpapi)
     planner = ActionPlanner(llm)
 
+    #: Set only when the planner is unavailable and this is an example case.
+    #: None for every ordinary run, which is the overwhelming majority.
+    scripted_plan = None
+
     try:
         # 1. Situation analysis — without this nothing downstream is meaningful.
         try:
             situation = await situation_agent.analyse(situation_text)
         except LLMUnavailableError as exc:
-            logger.error(
-                "Research: LLM unavailable for case %s (%s): %s", case_id, exc.reason, exc
+            # An example case continues without the model rather than dying at
+            # the first step.
+            #
+            # Situation analysis is an LLM call, so an exhausted quota stopped a
+            # walkthrough before any search ran — which made the product look
+            # broken when only one of its providers was. For an example case we
+            # fall back to a situation built from the scenario's own declared
+            # category plus deterministic triage (no model involved), and then
+            # run the ordinary live searches.
+            #
+            # This is NOT done for a real user's case. Someone describing their
+            # own situation deserves the real analysis or an honest outage —
+            # not a generic stand-in that looks like we understood them.
+            demo_scenario = (
+                get_scenario(case_doc.get("demo_scenario_id") or "")
+                if case_doc.get("is_demo")
+                else None
             )
-            cases_col.update_one(
-                scoped,
-                {"$set": {"status": CaseStatus.ACTIVE.value, "updated_at": datetime.utcnow()}},
+            if demo_scenario is None:
+                logger.error(
+                    "Research: LLM unavailable for case %s (%s): %s",
+                    case_id, exc.reason, exc,
+                )
+                cases_col.update_one(
+                    scoped,
+                    {"$set": {"status": CaseStatus.ACTIVE.value, "updated_at": datetime.utcnow()}},
+                )
+                raise HTTPException(
+                    status_code=429 if exc.reason == "rate_limited" else 503,
+                    detail=(
+                        f"{exc.user_message} Your case is saved — open it and press "
+                        f"Retry research when you are ready."
+                    ),
+                )
+
+            logger.info(
+                "Research: planner unavailable, using the written plan for example case %s",
+                log_fields(scenario=demo_scenario.id, reason=exc.reason),
             )
-            raise HTTPException(
-                status_code=429 if exc.reason == "rate_limited" else 503,
-                detail=(
-                    f"{exc.user_message} Your case is saved — open it and press "
-                    f"Retry research when you are ready."
-                ),
-            )
+            situation = situation_from_scenario(demo_scenario, situation_text)
+            scripted_plan = scripted_research_plan(demo_scenario, case_id)
 
         cases_col.update_one(
             scoped,
@@ -139,6 +176,9 @@ async def run_pipeline(case_id: str, identity: Identity = Depends(get_identity))
             verifier=verifier,
             maps_service=maps_service,
             user_location=location,
+            # Set only when the planner was unavailable and this is an example
+            # case; None for every ordinary run.
+            preplanned=scripted_plan,
         )
 
         report_result = reports_col.insert_one(report.model_dump())
@@ -200,6 +240,13 @@ async def run_pipeline(case_id: str, identity: Identity = Depends(get_identity))
             "situation": situation.model_dump(),
             "evidence": [e.model_dump() for e in evidence],
             "local_resources": [r.model_dump() for r in local_resources],
+            # The plan itself was never persisted, so `plan_origin` — which
+            # says whether an agent chose these searches or they came from a
+            # written example — had nowhere to live and the UI could not tell
+            # the two apart.
+            "research_plan": (
+                report.research_plan.model_dump() if report.research_plan else None
+            ),
             "research_trace": [t.model_dump() for t in report.trace],
             "research_degradations": [d.model_dump() for d in report.degradations],
             "research_location_used": report.location_used,

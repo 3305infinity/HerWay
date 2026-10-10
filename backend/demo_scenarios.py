@@ -64,6 +64,20 @@ class DemoScenario:
     #: Roughly how urgent this reads. Used only to order the list; the real
     #: urgency comes from safety_triage at run time.
     urgency_hint: str = "medium"
+    #: Pre-written searches, used **only** when the LLM planner is unavailable.
+    #:
+    #: Research planning is an LLM call, so an exhausted Gemini quota meant a
+    #: scenario could not get past planning and the walkthrough died at the
+    #: first step. These let it continue: the *plan* is pre-written, but the
+    #: searches that follow are the ordinary live SerpApi calls, returning real
+    #: results with real links and real timestamps.
+    #:
+    #: Nothing here is a saved result. Only the question is scripted; the
+    #: answer is still retrieved. The plan is labelled `scripted` so the UI can
+    #: say so rather than implying an agent chose these.
+    #:
+    #: Each entry: (query, vertical, purpose, expected_information)
+    fallback_searches: List[tuple] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -114,6 +128,17 @@ SCENARIOS: List[DemoScenario] = [
         ],
         expected_engines=["google_maps", "google"],
         urgency_hint="medium",
+        fallback_searches=[
+            ("women police station Pune", "maps",
+             "Find the nearest women's police help in the area",
+             "Addresses and phone numbers for women's police desks"),
+            ("24 hour pharmacy Kothrud Pune", "maps",
+             "Identify places that are actually open late along the route",
+             "Somewhere lit and staffed to stop at if needed"),
+            ("women safety helpline Maharashtra official", "web",
+             "Confirm the current state helpline from an official page",
+             "A helpline number traceable to a government source"),
+        ],
     ),
     DemoScenario(
         id="workplace_harassment",
@@ -142,6 +167,17 @@ SCENARIOS: List[DemoScenario] = [
         ],
         expected_engines=["google"],
         urgency_hint="medium",
+        fallback_searches=[
+            ("POSH Act 2013 internal committee complaint procedure", "web",
+             "Establish the statutory complaint route",
+             "How a complaint is filed and who receives it"),
+            ("SHe-Box online complaint sexual harassment workplace", "web",
+             "Find the government portal for workplace complaints",
+             "The official online reporting route"),
+            ("POSH Act 2013 timeline complaint 90 days", "web",
+             "Check the statutory time limits",
+             "How long a complainant has, and what the committee must do"),
+        ],
     ),
     DemoScenario(
         id="online_blackmail",
@@ -168,6 +204,17 @@ SCENARIOS: List[DemoScenario] = [
         ],
         expected_engines=["google"],
         urgency_hint="high",
+        fallback_searches=[
+            ("cybercrime.gov.in report online harassment blackmail", "web",
+             "Find the national cyber crime reporting route",
+             "The official portal and what reporting involves"),
+            ("1930 cyber crime helpline India official", "web",
+             "Confirm the current cyber crime helpline",
+             "A number traceable to an official page"),
+            ("preserve evidence screenshots cyber crime complaint India", "web",
+             "Find guidance on what to keep before anything is deleted",
+             "What form of evidence is accepted and how to keep it"),
+        ],
     ),
     DemoScenario(
         id="unfamiliar_area",
@@ -194,6 +241,17 @@ SCENARIOS: List[DemoScenario] = [
         ],
         expected_engines=["google_news", "google_maps", "google"],
         urgency_hint="low",
+        fallback_searches=[
+            ("Delhi neighbourhood safety news", "news",
+             "See what has recently been reported about the area",
+             "Recent coverage, with dates where available"),
+            ("hospital Delhi", "maps",
+             "Check what medical help is nearby",
+             "Hospitals and clinics within reach"),
+            ("metro station Delhi", "maps",
+             "Check transport options from the area",
+             "Nearest stations and connections"),
+        ],
     ),
 ]
 
@@ -232,3 +290,89 @@ def is_demo_case(case: Dict[str, Any]) -> bool:
     if case.get("is_demo") is True:
         return True
     return str(case.get("title") or "").startswith(DEMO_TITLE_PREFIX)
+
+
+def scripted_research_plan(scenario: DemoScenario, case_id: str):
+    """A research plan from a scenario's pre-written searches.
+
+    Used only when the LLM planner is unavailable and the case is an example.
+    The returned plan is an ordinary ``ResearchPlan`` and is executed by the
+    ordinary orchestrator, so every search is a real, live SerpApi call —
+    nothing here is a saved result.
+
+    ``plan_origin="scripted"`` marks it so the research trail can say the
+    questions were written in advance rather than chosen by an agent.
+    """
+    from backend.models.research import ResearchPlan, ResearchTask, SearchVertical
+
+    vertical_map = {
+        "web": SearchVertical.WEB,
+        "news": SearchVertical.NEWS,
+        "maps": SearchVertical.MAPS,
+    }
+
+    tasks = [
+        ResearchTask(
+            task_id=f"TASK_{index + 1:02d}",
+            query=query,
+            vertical=vertical_map.get(vertical, SearchVertical.WEB),
+            purpose=purpose,
+            expected_information=expected,
+            location=scenario.location,
+        )
+        for index, (query, vertical, purpose, expected) in enumerate(
+            scenario.fallback_searches
+        )
+    ]
+
+    return ResearchPlan(
+        case_id=case_id,
+        reasoning=(
+            "Planned from a written example because the research planner was "
+            "unavailable. The searches below ran live."
+        ),
+        tasks=tasks,
+        search_budget=max(len(tasks), 1),
+        plan_origin="scripted",
+    )
+
+
+def situation_from_scenario(scenario: DemoScenario, situation_text: str):
+    """A ``Situation`` for an example case when the model is unavailable.
+
+    Built only from what is already known — the scenario's own declared
+    category and location, the user-visible text, and deterministic triage from
+    ``safety_triage``. **No facts are invented.** ``known_facts`` is left empty
+    rather than filled with plausible-looking extractions, because asserting
+    that someone stated something they did not is exactly the failure this
+    product is built to avoid.
+
+    ``case_summary`` is the scenario's own one-line description, not a
+    generated paraphrase, so nothing here claims to be model output.
+    """
+    from backend.models.research import Situation, SituationCategory
+    from backend.safety_triage import apply_triage_to_text
+
+    try:
+        category = SituationCategory(scenario.category)
+    except ValueError:
+        category = SituationCategory.OTHER
+
+    situation = Situation(
+        case_summary=scenario.summary,
+        category=category,
+        user_goal="Understand the options and what to do next",
+        location=scenario.location,
+        # Deliberately empty. A stand-in must not put words in anyone's mouth.
+        known_facts=[],
+        user_claims=[],
+        unknowns=[
+            "Detailed analysis was unavailable, so this is based on the "
+            "example's own description rather than a reading of the text."
+        ],
+        recommended_research_types=scenario.expected_engines,
+    )
+
+    # Real triage — regex over the actual text, no model. Urgency can only be
+    # raised here, never lowered.
+    return apply_triage_to_text(situation, situation_text)

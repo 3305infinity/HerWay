@@ -440,6 +440,7 @@ class ResearchOrchestrator:
         verifier: SourceVerifier,
         maps_service: MapsService,
         user_location: Optional[Location] = None,
+        preplanned: Optional[ResearchPlan] = None,
     ) -> FinalResearchReport:
         """
         Executes the intelligent multi-pass research orchestration loop:
@@ -451,8 +452,17 @@ class ResearchOrchestrator:
         degradations: List[ResearchDegradation] = []
 
         # 1. Initial Plan & Concurrent Execution
+        #
+        # A caller may hand in a plan instead. That path exists so an example
+        # case can continue when the LLM planner is unavailable: the questions
+        # are pre-written, but every search below is still a live SerpApi call.
         try:
-            initial_plan = await self.plan_research(case_id, situation, user_location, iteration=1)
+            if preplanned is not None:
+                initial_plan = preplanned
+            else:
+                initial_plan = await self.plan_research(
+                    case_id, situation, user_location, iteration=1
+                )
         except Exception as exc:
             # Planning depends on the LLM. If it is down we still want to return
             # a case the user can open, with an honest explanation.

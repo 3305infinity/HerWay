@@ -237,3 +237,88 @@ def test_is_demo_case_uses_the_flag():
 def test_is_demo_case_falls_back_to_the_title_prefix():
     """Cases created before the flag existed are still identifiable."""
     assert is_demo_case({"title": f"{DEMO_TITLE_PREFIX} Something"}) is True
+
+
+# ---------------------------------------------------------------------------
+# Scripted fallback when the planner is unavailable
+# ---------------------------------------------------------------------------
+# Research planning is an LLM call, so an exhausted Gemini quota stopped an
+# example before any search ran. These pin the fallback — and, more
+# importantly, that it never applies to a real user's case.
+
+def test_every_scenario_has_fallback_searches():
+    for scenario in SCENARIOS:
+        assert scenario.fallback_searches, f"{scenario.id} has no fallback searches"
+
+
+def test_fallback_searches_use_only_implemented_verticals():
+    allowed = {"web", "news", "maps"}
+    for scenario in SCENARIOS:
+        for _query, vertical, _purpose, _expected in scenario.fallback_searches:
+            assert vertical in allowed, f"{scenario.id} uses unsupported {vertical!r}"
+
+
+def test_fallback_searches_carry_a_purpose():
+    """A trail entry without a 'why' is not a research trail."""
+    for scenario in SCENARIOS:
+        for query, _v, purpose, expected in scenario.fallback_searches:
+            assert query.strip() and purpose.strip() and expected.strip()
+
+
+def test_scripted_plan_is_labelled_as_scripted():
+    from backend.demo_scenarios import scripted_research_plan
+
+    plan = scripted_research_plan(get_scenario("workplace_harassment"), "case_1")
+    assert plan.plan_origin == "scripted"
+    assert plan.case_id == "case_1"
+    assert len(plan.tasks) == 3
+
+
+def test_an_ordinary_plan_is_not_labelled_scripted():
+    """The default must be the truthful one for a real agent-made plan."""
+    from backend.models.research import ResearchPlan
+
+    assert ResearchPlan(case_id="c").plan_origin == "llm"
+
+
+def test_scripted_plan_tasks_are_executable():
+    from backend.demo_scenarios import scripted_research_plan
+
+    plan = scripted_research_plan(get_scenario("unfamiliar_area"), "case_1")
+    for task in plan.tasks:
+        assert task.task_id and task.query and task.purpose
+        assert task.expected_information
+
+
+def test_situation_from_scenario_invents_no_facts():
+    """A stand-in must not put words in the user's mouth."""
+    from backend.demo_scenarios import situation_from_scenario
+
+    scenario = get_scenario("online_blackmail")
+    situation = situation_from_scenario(scenario, scenario.situation_text)
+
+    assert situation.known_facts == [], "must not assert facts the user did not state"
+    assert situation.user_claims == []
+    assert any("unavailable" in u.lower() for u in situation.unknowns)
+
+
+def test_situation_from_scenario_still_runs_real_triage():
+    """Triage is deterministic, so urgency is real even with no model."""
+    from backend.demo_scenarios import situation_from_scenario
+    from backend.models.research import Urgency
+
+    scenario = get_scenario("late_night_travel")
+    situation = situation_from_scenario(
+        scenario, "he is following me right now and I am scared"
+    )
+    assert situation.urgency is Urgency.CRITICAL
+
+
+def test_fallback_queries_contain_no_personal_details():
+    """These go straight to SerpApi — they must carry nothing identifying."""
+    import re
+
+    for scenario in SCENARIOS:
+        for query, _v, _p, _e in scenario.fallback_searches:
+            assert not re.search(r"\b\d{10}\b", query), "phone number in a query"
+            assert "@" not in query, "email in a query"
