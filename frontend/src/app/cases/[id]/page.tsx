@@ -84,6 +84,21 @@ const PHASES = [
 
 type TabId = 'plan' | 'evidence' | 'resources' | 'community';
 
+/**
+ * The host behind a URL, for the source chip on a plan step.
+ *
+ * Returns null rather than throwing on anything unparseable, because a step
+ * with a malformed source link should lose its chip, not the whole plan.
+ */
+function sourceDomain(url?: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -421,6 +436,43 @@ export default function CaseWorkspacePage() {
   const hasNoResearch = trace.length === 0 && evidenceList.length === 0;
   const knownLocation = situation?.location || caseData.location_context || null;
 
+  // ── Research summary ────────────────────────────────────────
+  // Every number below is counted from this case's own trace and evidence.
+  // Nothing here is a constant: a case where three searches failed shows
+  // three fewer, and a case with no .gov.in source shows zero official.
+  const engineOf = (engine: string) => {
+    const e = (engine || '').toLowerCase();
+    if (e.includes('news')) return 'News';
+    if (e.includes('map') || e.includes('local')) return 'Maps';
+    return 'Search';
+  };
+
+  const liveSearches = trace.filter((t) => t.success && !t.is_cached);
+  const cachedSearches = trace.filter((t) => t.is_cached).length;
+  const failedSearches = trace.filter((t) => !t.success).length;
+
+  const engineCounts = liveSearches.reduce<Record<string, number>>((acc, t) => {
+    const label = engineOf(t.provider_engine || t.engine);
+    acc[label] = (acc[label] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  // "Official" means the verifier classified it as government, or the domain
+  // itself is one. Anything else is counted as an ordinary source.
+  const officialSources = evidenceList.filter((ev) => {
+    const domain = (ev.domain || '').toLowerCase();
+    return (
+      ev.source_type === 'official_government' ||
+      domain.endsWith('.gov.in') ||
+      domain.endsWith('.nic.in')
+    );
+  }).length;
+
+  const contradictionCount = evidenceList.reduce(
+    (total, ev) => total + (ev.contradictions?.length ?? 0),
+    0,
+  );
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {isSafetyMode && (
@@ -459,7 +511,9 @@ export default function CaseWorkspacePage() {
               )}
             </div>
             <h1 className="text-lg sm:text-xl font-semibold text-foreground leading-tight">
-              {caseData.title || 'Case workspace'}
+              {/* The stored prefix stays on the record; the heading shows the
+                  title itself. */}
+              {caseData.title?.replace(/^Example:\s*/, '') || 'Case workspace'}
             </h1>
           </div>
 
@@ -540,6 +594,89 @@ export default function CaseWorkspacePage() {
                   {isRetryingResearch ? 'Researching…' : 'Run research now'}
                 </button>
               </EmptyState>
+            )}
+
+            {/* Research summary — what the search layer actually did for this
+                case, counted from its own trace. */}
+            {trace.length > 0 && (
+              <div className="rounded-xl border border-border/80 bg-card p-4 elevate-1 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Research summary
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsTrailOpen(true)}
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    View research trail →
+                  </button>
+                </div>
+
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+                  <div>
+                    <dt className="text-[11px] text-muted-foreground">Live searches</dt>
+                    <dd className="font-serif text-xl tabular-nums text-foreground">
+                      {liveSearches.length}
+                    </dd>
+                    <dd className="mt-0.5 flex flex-wrap gap-1">
+                      {(['Search', 'Maps', 'News'] as const)
+                        .filter((label) => engineCounts[label])
+                        .map((label) => (
+                          <span
+                            key={label}
+                            className="rounded border border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                          >
+                            {label} {engineCounts[label]}
+                          </span>
+                        ))}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-[11px] text-muted-foreground">Sources found</dt>
+                    <dd className="font-serif text-xl tabular-nums text-foreground">
+                      {evidenceList.length}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-[11px] text-muted-foreground">Official sources</dt>
+                    <dd className="font-serif text-xl tabular-nums text-foreground">
+                      {officialSources}
+                    </dd>
+                    <dd className="mt-0.5 text-[10px] text-muted-foreground">
+                      Government pages
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-[11px] text-muted-foreground">Contradictions</dt>
+                    <dd
+                      className={`font-serif text-xl tabular-nums ${
+                        contradictionCount > 0
+                          ? 'text-amber-700 dark:text-amber-400'
+                          : 'text-foreground'
+                      }`}
+                    >
+                      {contradictionCount}
+                    </dd>
+                    <dd className="mt-0.5 text-[10px] text-muted-foreground">
+                      {contradictionCount > 0 ? 'Shown, not resolved' : 'None flagged'}
+                    </dd>
+                  </div>
+                </dl>
+
+                {(cachedSearches > 0 || failedSearches > 0) && (
+                  <p className="border-t border-border/60 pt-2.5 text-[11px] text-muted-foreground">
+                    {cachedSearches > 0 &&
+                      `${cachedSearches} search${cachedSearches !== 1 ? 'es' : ''} reused an earlier identical result`}
+                    {cachedSearches > 0 && failedSearches > 0 && ' · '}
+                    {failedSearches > 0 &&
+                      `${failedSearches} did not complete`}
+                  </p>
+                )}
+              </div>
             )}
 
             {/* Situation */}
@@ -760,18 +897,39 @@ export default function CaseWorkspacePage() {
                                       {act.safety_caveat}
                                     </p>
                                   )}
-                                  {(act.evidence_ids?.length ?? 0) > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        setActiveTab('evidence');
-                                      }}
-                                      className="text-[11px] text-primary hover:underline"
-                                    >
-                                      Why this step? See the source →
-                                    </button>
-                                  )}
+                                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                    {(act.evidence_ids?.length ?? 0) > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          setActiveTab('evidence');
+                                        }}
+                                        className="text-[11px] text-primary hover:underline"
+                                      >
+                                        Why this step? See the source →
+                                      </button>
+                                    )}
+                                    {/* The page this step came from, named. A
+                                        step whose source is a .gov.in page and
+                                        one whose source is a blog should not
+                                        look identical. */}
+                                    {sourceDomain(act.supporting_url) && (
+                                      <a
+                                        href={act.supporting_url!}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="inline-flex items-center gap-1 rounded border border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+                                        title={act.supporting_url!}
+                                      >
+                                        <span className="text-muted-foreground/70">Source</span>
+                                        <span className="font-mono">
+                                          {sourceDomain(act.supporting_url)}
+                                        </span>
+                                      </a>
+                                    )}
+                                  </div>
                                 </div>
                               </label>
                             ))}

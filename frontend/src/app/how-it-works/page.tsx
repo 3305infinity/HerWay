@@ -69,19 +69,57 @@ const ENGINES = [
     id: 'google',
     retrieves: 'Statutes, official procedures, helpline numbers, government portals',
     why: 'Legal procedure and helpline numbers change, and a model answering from memory will quote a number that was retired two years ago. This retrieves the current page and links you to it.',
+    query: 'POSH Act 2013 internal committee complaint procedure site:gov.in',
   },
   {
     name: 'Google News',
     id: 'google_news',
     retrieves: 'Recent public reporting about an area or an ongoing matter',
     why: 'Used sparingly and only when recency matters. Each item is labelled allegation, reported incident or official statement — and a handful of articles can never establish a crime rate.',
+    query: 'women safety police advisory Bengaluru recent',
   },
   {
     name: 'Google Maps',
     id: 'google_maps',
     retrieves: 'One Stop Centres, women police stations, hospitals, legal aid, transport',
     why: 'A phone number for a centre in your district is worth more than a national average. Listings are shown with their provenance and never presented as confirmed or verified.',
+    query: 'One Stop Centre Lucknow Uttar Pradesh',
   },
+];
+
+/** What happens to a result between the search returning and you reading it. */
+const RESULT_FLOW = [
+  {
+    name: 'Plan',
+    body: 'Two to four targeted questions are chosen, with an engine for each and a budget. Personal details are stripped before a query is formed.',
+  },
+  {
+    name: 'Search',
+    body: 'SerpApi runs them. Results are cached briefly and retried with backoff, so one flaky minute does not become a wrong answer.',
+  },
+  {
+    name: 'Normalise',
+    body: 'Web results, map listings and news items become one shape — title, URL, domain, snippet, retrieval time — so everything after this treats them identically.',
+  },
+  {
+    name: 'Verify',
+    body: 'Each source is scored, agreement and contradiction between sources are recorded, and every resource gets its provenance label.',
+  },
+  {
+    name: 'Act',
+    body: 'What survives becomes prioritised steps, each keeping a link back to the page it came from.',
+  },
+];
+
+/**
+ * The confidence weights, copied from the formula in
+ * `backend/agents/source_verifier.py`. If that formula changes, this is wrong.
+ */
+const SCORE_WEIGHTS = [
+  { weight: '0.40', name: 'Authority', body: 'A .gov.in page and an anonymous blog do not carry the same weight.' },
+  { weight: '0.25', name: 'Agreement', body: 'Independent sources saying the same thing raise confidence; disagreement is surfaced, not averaged away.' },
+  { weight: '0.20', name: 'Directness', body: 'A page that answers the question beats one that merely mentions the topic.' },
+  { weight: '0.15', name: 'Freshness', body: 'Recency counts for most where procedure and numbers change.' },
 ];
 
 const STACK = [
@@ -171,7 +209,7 @@ export default function HowItWorksPage() {
 
       {/* Engines */}
       <Reveal className="mb-10">
-        <h2 className="mb-1 font-serif text-xl font-normal">Which searches, and why</h2>
+        <h2 className="mb-1 font-serif text-xl font-normal">What we search, and why</h2>
         <p className="mb-4 text-xs text-muted-foreground">
           Only engines that suit the question — not every engine for every request.
         </p>
@@ -184,9 +222,56 @@ export default function HowItWorksPage() {
               </div>
               <p className="mt-1.5 text-xs text-foreground">{engine.retrieves}</p>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{engine.why}</p>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Query it runs:{' '}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-foreground">
+                  {engine.query}
+                </code>
+              </p>
             </div>
           ))}
         </div>
+
+        {/* What happens between the search returning and you reading it.
+            Deliberately placed inside this section rather than beside the
+            seven steps above — it is one of those steps, in detail. */}
+        <h3 className="mb-1 mt-7 font-serif text-base font-normal">
+          What happens to a result
+        </h3>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Between the search returning and you reading it.
+        </p>
+        <ol className="grid grid-cols-1 gap-2.5 sm:grid-cols-5">
+          {RESULT_FLOW.map((stage, index) => (
+            <li key={stage.name} className="rounded-xl border border-border/80 bg-card p-3 elevate-1">
+              <span className="font-serif text-xs tabular-nums text-primary">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <h4 className="mt-0.5 text-xs font-medium text-foreground">{stage.name}</h4>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                {stage.body}
+              </p>
+            </li>
+          ))}
+        </ol>
+
+        <h3 className="mb-1 mt-7 font-serif text-base font-normal">How a source is scored</h3>
+        <p className="mb-3 text-xs text-muted-foreground">
+          One confidence figure per source, from four weighted parts.
+        </p>
+        <ul className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/80 bg-card elevate-1">
+          {SCORE_WEIGHTS.map((s) => (
+            <li key={s.name} className="flex items-baseline gap-3 px-4 py-2.5 sm:gap-4">
+              <span className="w-9 shrink-0 font-serif text-sm tabular-nums text-primary">
+                {s.weight}
+              </span>
+              <span className="w-20 shrink-0 text-xs font-medium text-foreground sm:w-24">
+                {s.name}
+              </span>
+              <span className="text-[11px] leading-relaxed text-muted-foreground">{s.body}</span>
+            </li>
+          ))}
+        </ul>
       </Reveal>
 
       {/* Stack */}
@@ -256,15 +341,15 @@ export default function HowItWorksPage() {
       <Reveal className="rounded-xl border border-border/80 bg-card p-5 elevate-1">
         <h2 className="font-serif text-lg font-normal">See it run</h2>
         <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-          Four example situations on the home page go through this exact pipeline —
-          real analysis, real search, real sources. They are written examples rather
-          than real cases, and anything they create is yours to delete.
+          The common situations on the home page go through this exact pipeline —
+          real analysis, real search, real sources. Anything they create is yours
+          to delete.
         </p>
         <Link
           href="/"
           className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
-          Try an example →
+          Try a situation →
         </Link>
       </Reveal>
     </main>

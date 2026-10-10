@@ -1,21 +1,23 @@
 'use client';
 
 /**
- * Demonstration scenarios.
+ * Quick-start chips under the writing box.
  *
- * Picking one fills the ordinary situation box with its text and scrolls to
- * it. It does **not** submit anything, call a special endpoint, or render a
- * mock result — the user still reads what was written, can edit it, and
- * presses the same Continue button as anyone else. Everything downstream is
- * the real pipeline.
+ * Picking one fills the ordinary situation box with its text and sets the
+ * location. It does **not** submit anything, call a special endpoint, or render
+ * a prepared result — the user still reads what was written, can edit it, and
+ * presses the same Continue button as anyone else. Everything downstream is the
+ * real pipeline.
  *
- * That constraint is the whole point. A demo that short-circuits to a prepared
- * screen proves nothing about whether the product works; this proves the
- * product works, using text someone else wrote.
+ * This replaced an expandable panel that explained itself at length before
+ * showing anything. A row of chips is what the rest of the product does when it
+ * offers a shortcut, and it does not ask the reader to open a disclosure before
+ * they can start.
  *
- * Collapsed by default so the page still opens with a blank box and the
- * question — someone arriving with a real situation should not have to scroll
- * past four fictional ones to reach it.
+ * Two rows, scrolling sideways, so ten shortcuts never push the writing surface
+ * down the page. If the list cannot be fetched the row simply does not render —
+ * there is no local copy of the text to fall back on, and inventing one would
+ * put words in the box that no situation actually produced.
  */
 
 import React from 'react';
@@ -35,10 +37,22 @@ export type DemoScenario = {
   disclaimer: string;
 };
 
-const ENGINE_LABELS: Record<string, string> = {
-  google: 'Google Search',
-  google_news: 'Google News',
-  google_maps: 'Google Maps',
+/**
+ * Chip wording — shorter and more spoken than the stored titles, which are
+ * written to read as headings. Anything without an entry falls back to its own
+ * title rather than being hidden.
+ */
+const CHIP_LABELS: Record<string, string> = {
+  late_night_travel: 'Travelling late alone',
+  workplace_harassment: 'Harassment at work',
+  online_blackmail: 'Blackmail online',
+  unfamiliar_area: 'Unfamiliar area',
+  domestic_violence_exit: 'Need to leave home',
+  stalking_ex: 'Being followed or stalked',
+  fir_refused: "Police won't register FIR",
+  campus_harassment: 'Campus harassment',
+  dowry_pressure: 'Dowry pressure',
+  new_city_housing: 'Moving to a new city',
 };
 
 export default function DemoScenarios({
@@ -48,142 +62,50 @@ export default function DemoScenarios({
   onPick: (scenario: DemoScenario) => void;
 }) {
   const [scenarios, setScenarios] = React.useState<DemoScenario[] | null>(null);
-  const [open, setOpen] = React.useState(false);
-  const [expanded, setExpanded] = React.useState<string | null>(null);
+  const [failed, setFailed] = React.useState(false);
 
   React.useEffect(() => {
-    if (!open || scenarios) return;
     let cancelled = false;
     apiGet<{ scenarios: DemoScenario[] }>('/api/v2/demo/scenarios').then((result) => {
-      if (!cancelled && result.ok) setScenarios(result.data.scenarios);
+      if (cancelled) return;
+      if (result.ok) setScenarios(result.data.scenarios);
+      else setFailed(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [open, scenarios]);
+  }, []);
+
+  if (failed) return null;
 
   return (
-    <div className="rounded-xl border border-border/70 bg-muted/20">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-muted/40"
-      >
-        <span className="text-muted-foreground">
-          Not sure what to write?{' '}
-          <span className="text-foreground">Start from an example situation.</span>
-        </span>
-        <span
-          aria-hidden
-          className={`shrink-0 text-xs text-muted-foreground transition-transform duration-200 ${
-            open ? 'rotate-180' : ''
-          }`}
-        >
-          ▾
-        </span>
-      </button>
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">Quick start</p>
 
-      {open && (
-        <div className="border-t border-border/70 p-3">
-          <p className="mb-3 px-1 text-[11px] leading-relaxed text-muted-foreground">
-            Written examples, not real cases. Pick one and its text fills the box
-            below — you can edit it, and the research that follows is real.
-          </p>
+      {/* Two rows that scroll sideways rather than wrapping into four. The
+          writing box stays the tallest thing in view at every width. */}
+      <div className="custom-scrollbar -mx-1 grid auto-cols-max grid-flow-col grid-rows-2 gap-2 overflow-x-auto px-1 pb-1">
+        {!scenarios
+          ? [0, 1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="skeleton h-8 w-36 rounded-full" aria-hidden />
+            ))
+          : scenarios.map((scenario) => (
+              <button
+                key={scenario.id}
+                type="button"
+                onClick={() => onPick(scenario)}
+                title={scenario.summary}
+                className="whitespace-nowrap rounded-full border border-border/80 bg-card px-3.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/[0.06] hover:text-foreground"
+              >
+                {CHIP_LABELS[scenario.id] ?? scenario.title}
+              </button>
+            ))}
+      </div>
 
-          {!scenarios && (
-            <div className="space-y-2" aria-label="Loading scenarios">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="skeleton h-16 w-full rounded-lg" />
-              ))}
-            </div>
-          )}
-
-          <ul className="space-y-2">
-            {scenarios?.map((scenario) => {
-              const isOpen = expanded === scenario.id;
-              return (
-                <li
-                  key={scenario.id}
-                  className="overflow-hidden rounded-lg border border-border/70 bg-card transition-colors hover:border-primary/40"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2 p-3">
-                    <div className="min-w-0 flex-1">
-                      <h4 className="text-sm font-medium text-foreground">
-                        {scenario.title}
-                      </h4>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                        {scenario.summary}
-                      </p>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        {scenario.expected_engines.map((engine) => (
-                          <span
-                            key={engine}
-                            className="rounded border border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
-                            // "Likely", because the planner decides at run time
-                            // and the research trail shows what actually ran.
-                            title="The planner will likely use this engine — the research trail shows what actually ran"
-                          >
-                            {ENGINE_LABELS[engine] ?? engine}
-                          </span>
-                        ))}
-                        {scenario.location && (
-                          <span className="text-[10px] text-muted-foreground">
-                            · {scenario.location}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setExpanded(isOpen ? null : scenario.id)}
-                        className="text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                      >
-                        {isOpen ? 'Hide' : 'Read it'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onPick(scenario)}
-                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                      >
-                        Try this
-                      </button>
-                    </div>
-                  </div>
-
-                  {isOpen && (
-                    <div className="border-t border-border/60 bg-muted/30 p-3">
-                      <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground">
-                        {scenario.situation_text}
-                      </p>
-                      {scenario.demonstrates.length > 0 && (
-                        <>
-                          <p className="mt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            What to watch for
-                          </p>
-                          <ul className="mt-1 space-y-0.5">
-                            {scenario.demonstrates.map((item) => (
-                              <li
-                                key={item}
-                                className="text-[11px] leading-relaxed text-muted-foreground"
-                              >
-                                · {item}
-                              </li>
-                            ))}
-                          </ul>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        Fills the box above so you can edit it before continuing. Nothing is sent
+        until you press Continue.
+      </p>
     </div>
   );
 }

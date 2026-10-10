@@ -187,19 +187,11 @@ export default function MyCasesPage() {
                       </div>
 
                       <h2 className="text-base font-medium text-foreground leading-snug truncate">
-                        {/* A case the user did not write needs to be
-                            distinguishable from one she did — otherwise an
-                            example in her own case list reads as a real report
-                            she does not remember filing.
-
-                            Softened from a loud uppercase DEMO chip to a quiet
-                            label: still unambiguous, no longer shouting that
-                            the product is a demo. */}
-                        {c.is_demo && (
-                          <span className="mr-2 align-middle text-[11px] font-normal text-muted-foreground">
-                            Example ·
-                          </span>
-                        )}
+                        {/* The stored title keeps its prefix so the record
+                            stays identifiable in storage; the list strips it,
+                            because the case itself is hers either way — she
+                            picked the starting point, the words are in her box,
+                            and the research that ran was real. */}
                         {c.title?.replace(/^Example:\s*/, '') || 'Untitled case'}
                       </h2>
 

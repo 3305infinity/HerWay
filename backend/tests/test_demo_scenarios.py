@@ -56,14 +56,47 @@ def other_client():
 # The scenarios themselves
 # ---------------------------------------------------------------------------
 
+#: The first four written. Asserted as a subset rather than the whole set so
+#: adding situations never breaks this test — removing one still does.
+ORIGINAL_IDS = {
+    "late_night_travel",
+    "workplace_harassment",
+    "online_blackmail",
+    "unfamiliar_area",
+}
+
+#: Added afterwards, covering the situations HerWay is most often opened for.
+ADDITIONAL_IDS = {
+    "domestic_violence_exit",
+    "stalking_ex",
+    "fir_refused",
+    "campus_harassment",
+    "dowry_pressure",
+    "new_city_housing",
+}
+
+
 def test_all_four_scenarios_exist():
-    ids = {s.id for s in SCENARIOS}
-    assert ids == {
-        "late_night_travel",
-        "workplace_harassment",
-        "online_blackmail",
-        "unfamiliar_area",
-    }
+    assert ORIGINAL_IDS <= {s.id for s in SCENARIOS}
+
+
+def test_additional_scenarios_exist():
+    assert ADDITIONAL_IDS <= {s.id for s in SCENARIOS}
+
+
+def test_scenario_ids_are_unique():
+    """A duplicate id would silently shadow one in SCENARIOS_BY_ID."""
+    ids = [s.id for s in SCENARIOS]
+    assert len(ids) == len(set(ids)), f"duplicate ids: {sorted(set(i for i in ids if ids.count(i) > 1))}"
+
+
+def test_every_scenario_category_is_a_real_category():
+    """An unknown category would silently fall back to OTHER and mis-route."""
+    from backend.models.research import SituationCategory
+
+    valid = {c.value for c in SituationCategory}
+    for scenario in SCENARIOS:
+        assert scenario.category in valid, f"{scenario.id}: unknown category {scenario.category!r}"
 
 
 def test_every_scenario_is_runnable_through_the_normal_api():
@@ -111,7 +144,10 @@ def test_unknown_scenario_id_resolves_to_nothing():
 
 def test_scenarios_endpoint_lists_them(client):
     body = client.get("/api/v2/demo/scenarios").json()
-    assert body["count"] == 4
+    # Counted from the source rather than hardcoded, so adding a situation does
+    # not break this test.
+    assert body["count"] == len(SCENARIOS)
+    assert body["count"] >= len(ORIGINAL_IDS | ADDITIONAL_IDS)
     assert "fictional" in body["notice"].lower()
     assert "real pipeline" in body["how_it_works"].lower()
 
@@ -268,10 +304,13 @@ def test_fallback_searches_carry_a_purpose():
 def test_scripted_plan_is_labelled_as_scripted():
     from backend.demo_scenarios import scripted_research_plan
 
-    plan = scripted_research_plan(get_scenario("workplace_harassment"), "case_1")
+    scenario = get_scenario("workplace_harassment")
+    plan = scripted_research_plan(scenario, "case_1")
     assert plan.plan_origin == "scripted"
     assert plan.case_id == "case_1"
-    assert len(plan.tasks) == 3
+    # One task per written search, counted from the scenario rather than
+    # hardcoded, so adding a search to a scenario does not break this.
+    assert len(plan.tasks) == len(scenario.fallback_searches)
 
 
 def test_an_ordinary_plan_is_not_labelled_scripted():

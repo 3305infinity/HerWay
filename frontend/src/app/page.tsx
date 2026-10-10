@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 
-import { apiPost } from '@/lib/api';
+import { apiGet, apiPost } from '@/lib/api';
 import VoiceInput from '@/components/VoiceInput';
 import DemoScenarios, { type DemoScenario } from '@/components/DemoScenarios';
 import { ALL_INDIAN_REGIONS, composeLocation } from '@/lib/india';
@@ -40,6 +40,15 @@ export default function Home() {
   const [caseId, setCaseId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [researchError, setResearchError] = useState<string | null>(null);
+
+  /** Whether live search is actually configured on the server answering us. */
+  const [serpapiUp, setSerpapiUp] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    apiGet<{ integrations?: Record<string, boolean> }>('/health').then((r) => {
+      if (r.ok) setSerpapiUp(Boolean(r.data.integrations?.serpapi));
+    });
+  }, []);
 
   // Pre-fill the box when arriving from a link that carries a starter.
   useEffect(() => {
@@ -87,6 +96,30 @@ export default function Home() {
       .getElementById('situation-textarea')
       ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
+
+  /**
+   * Arriving from `/project` with `?situation=<id>`.
+   *
+   * This only fills the box. Nothing is submitted, no case is created, and the
+   * user still reads the text, edits it if she wants to, and presses the same
+   * Continue button as anyone else. An unrecognised id simply does nothing.
+   */
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('situation');
+    if (!wanted) return;
+
+    let cancelled = false;
+    apiGet<{ scenarios: DemoScenario[] }>('/api/v2/demo/scenarios').then((result) => {
+      if (cancelled || !result.ok) return;
+      const match = result.data.scenarios.find((s) => s.id === wanted);
+      if (match) applyDemoScenario(match);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Runs once on arrival; `applyDemoScenario` only touches setState.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -405,19 +438,13 @@ export default function Home() {
               <span className="italic text-primary">alone.</span>
             </h1>
             <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Tell HerWay what happened, in your own words. It separates what you stated
-              as fact from what is still uncertain, looks up current Indian resources for
-              it, and gives you steps you can choose from.
+              Tell us what&apos;s happening. HerWay looks up the current law, helplines
+              and nearby help in India, and shows you where every answer came from.
             </p>
           </motion.div>
 
           <div className="mt-10 grid grid-cols-1 gap-8 lg:mt-12 lg:grid-cols-12 lg:gap-10">
             <div className="space-y-6 lg:col-span-7">
-
-          {/* Prepared scenarios. Collapsed, and below the question — someone
-              arriving with a real situation should not have to scroll past
-              four fictional ones to reach the box. */}
-          <DemoScenarios onPick={applyDemoScenario} />
 
           {/* The category list used to be its own section immediately above
               this one — two templated blocks doing the same job, asking you to
@@ -588,6 +615,11 @@ export default function Home() {
                 need the right legal terms, and you can leave out anything you would
                 rather not write down.
               </p>
+
+              {/* Shortcuts, directly under the box they fill. */}
+              <div className="pt-2">
+                <DemoScenarios onPick={applyDemoScenario} />
+              </div>
             </div>
 
             {/* Location — optional, never assumed */}
@@ -648,6 +680,46 @@ export default function Home() {
               </button>
             </div>
           </form>
+
+          {/* Three things worth knowing before you type, and the line saying
+              where the lookups come from. Deliberately quiet — this is a
+              footer note, not a claim. */}
+          <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
+            <ul className="flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:flex-wrap sm:gap-x-5">
+              {[
+                'Every answer links to its source',
+                'Private by default — no account needed',
+                'Press ESC to leave instantly',
+              ].map((item) => (
+                <li key={item} className="flex items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/60"
+                  />
+                  {item}
+                </li>
+              ))}
+            </ul>
+
+            <p className="flex items-center gap-1.5 border-t border-border/60 pt-2.5 text-[11px] text-muted-foreground">
+              {/* Read from /health, so this reflects the server actually
+                  answering rather than what the code hopes is configured. */}
+              {serpapiUp !== null && (
+                <span
+                  aria-hidden
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                    serpapiUp ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                />
+              )}
+              Live search by SerpApi · Google Search, Maps, News
+              {serpapiUp === false && (
+                <span className="text-amber-700 dark:text-amber-400">
+                  — not configured on this server
+                </span>
+              )}
+            </p>
+          </div>
             </div>
 
             {/* The illustration, now a companion to the form rather than a
@@ -849,39 +921,45 @@ export default function Home() {
               Everything else
             </span>
             <h2 className="font-serif text-2xl sm:text-3xl text-foreground font-normal tracking-tight">
-              Other ways in.
+              What you can do here.
             </h2>
           </div>
 
-          <ul className="divide-y divide-border/60 border-y border-border/60">
+          {/* Was a row of "Need legal information? → LawBot" questions, which
+              asked you to read five prompts before finding the one that
+              applied. Tiles name the thing and say what it does. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              { href: '/lawbot', ask: 'Need legal information?', name: 'LawBot' },
-              { href: '/therapybot', ask: 'Need someone to talk to?', name: 'Talk to Niva' },
-              { href: '/community', ask: 'Want to connect?', name: 'Community' },
-              { href: '/discreet-message', ask: 'Need discreet help?', name: 'Discreet Message' },
-              { href: '/cases', ask: 'Saved plans?', name: 'My Cases' },
+              { href: '/discover', icon: '📍', name: 'Find places', line: 'One Stop Centres, women police stations and legal aid near you.' },
+              { href: '/lawbot', icon: '⚖️', name: 'LawBot', line: 'Your rights and options under Indian law, answered from sources.' },
+              { href: '/safety-center', icon: '🛡️', name: 'Safety Center', line: 'Your own plan, trusted contacts and check-ins in one place.' },
+              { href: '/therapybot', icon: '💬', name: 'Talk to Niva', line: 'Someone to talk to when the first thing you need is not a procedure.' },
+              { href: '/community', icon: '👥', name: 'Community', line: 'Others working through similar situations, kept apart from your cases.' },
+              { href: '/discreet-message', icon: '🖼️', name: 'Discreet message', line: 'Hide a message inside a photo. Concealment, not encryption.' },
             ].map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className="group flex items-center gap-4 py-3.5 transition-colors"
-                >
-                  <span className="w-44 shrink-0 text-xs text-muted-foreground sm:w-56">
-                    {item.ask}
+              <Link
+                key={item.href}
+                href={item.href}
+                className="group rounded-xl border border-border/80 bg-card p-4 transition-colors elevate-1 hover:border-primary/40"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span aria-hidden className="text-base">
+                    {item.icon}
                   </span>
-                  <span className="flex-1 font-serif text-lg font-normal text-foreground transition-colors group-hover:text-primary">
-                    {item.name}
-                  </span>
+                  <h3 className="flex-1 text-sm font-medium text-foreground">{item.name}</h3>
                   <span
                     aria-hidden
-                    className="shrink-0 text-primary opacity-0 transition-all duration-200 -translate-x-1 group-hover:translate-x-0 group-hover:opacity-100"
+                    className="shrink-0 -translate-x-1 text-primary opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100"
                   >
                     →
                   </span>
-                </Link>
-              </li>
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                  {item.line}
+                </p>
+              </Link>
             ))}
-          </ul>
+          </div>
         </div>
       </section>
 

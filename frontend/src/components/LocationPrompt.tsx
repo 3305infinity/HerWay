@@ -54,7 +54,7 @@ export default function LocationPrompt({
       return;
     }
     if (pin && !/^[1-9]\d{5}$/.test(pin.trim())) {
-      setError('An Indian PIN code is 6 digits, for example 110001.');
+      setError('An Indian PIN code is 6 digits, like 110001.');
       return;
     }
 

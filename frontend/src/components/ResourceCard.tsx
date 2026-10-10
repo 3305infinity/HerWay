@@ -107,17 +107,37 @@ export default function ResourceCard({ resource }: { resource: MatchedResource }
           </p>
         )}
 
-        {resource.url && (
-          <a
-            href={resource.url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-primary hover:underline font-medium block pt-0.5"
-          >
-            {resource.verification === 'official_source'
-              ? 'View the official page →'
-              : 'View listing →'}
-          </a>
+        {/* The address above is already a maps link, but nothing said so.
+            Naming the action makes it findable for someone who is scanning
+            for "how do I get there" rather than reading the address. */}
+        {(resource.address || resource.url) && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5">
+            {resource.address && (
+              <a
+                href={`https://maps.google.com/?q=${encodeURIComponent(
+                  `${resource.name} ${resource.address}`,
+                )}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-primary hover:underline font-medium"
+                aria-label={`Directions to ${resource.name}`}
+              >
+                Directions →
+              </a>
+            )}
+            {resource.url && (
+              <a
+                href={resource.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-primary hover:underline font-medium"
+              >
+                {resource.verification === 'official_source'
+                  ? 'View the official page →'
+                  : 'View listing →'}
+              </a>
+            )}
+          </div>
         )}
       </div>
 

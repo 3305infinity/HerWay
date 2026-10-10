@@ -165,7 +165,7 @@ SCENARIOS: List[DemoScenario] = [
             "Documentation steps that carry an 'only if it is safe' caveat",
             "Legal information clearly separated from legal advice",
         ],
-        expected_engines=["google"],
+        expected_engines=["google", "google_maps"],
         urgency_hint="medium",
         fallback_searches=[
             ("POSH Act 2013 internal committee complaint procedure", "web",
@@ -177,6 +177,9 @@ SCENARIOS: List[DemoScenario] = [
             ("POSH Act 2013 timeline complaint 90 days", "web",
              "Check the statutory time limits",
              "How long a complainant has, and what the committee must do"),
+            ("Karnataka State Commission for Women office Bengaluru", "maps",
+             "Locate the body that takes a complaint outside the employer",
+             "An address and phone number that can be confirmed by calling"),
         ],
     ),
     DemoScenario(
@@ -251,6 +254,238 @@ SCENARIOS: List[DemoScenario] = [
             ("metro station Delhi", "maps",
              "Check transport options from the area",
              "Nearest stations and connections"),
+        ],
+    ),
+    DemoScenario(
+        id="domestic_violence_exit",
+        title="Planning to leave safely",
+        summary=(
+            "Where a One Stop Centre actually is, what a protection order under "
+            "PWDVA 2005 involves, and what to arrange before leaving."
+        ),
+        situation_text=(
+            "Things at home have been getting worse for about a year. My husband "
+            "shouts and has pushed me twice, and last month he took my phone away "
+            "for a week. I have a four year old. I do not have my own income and "
+            "my parents are not in this city. I have started thinking about "
+            "leaving but I do not know where I would go, what papers I should "
+            "take, or whether anyone would help me."
+        ),
+        category="domestic_violence",
+        location="Lucknow, Uttar Pradesh",
+        demonstrates=[
+            "One Stop Centre located by district, not a national average",
+            "PWDVA 2005 protection orders explained from the statute",
+            "Shelter options surfaced with their provenance",
+            "No step suggests confronting him",
+        ],
+        expected_engines=["google_maps", "google"],
+        urgency_hint="high",
+        fallback_searches=[
+            ("One Stop Centre Sakhi Lucknow", "maps",
+             "Find the nearest integrated support centre",
+             "Address and contact for a Sakhi centre in the district"),
+            ("PWDVA 2005 protection order procedure", "web",
+             "Understand what a protection order is and how it is obtained",
+             "The statutory route and who grants the order"),
+            ("181 women helpline official India", "web",
+             "Confirm the current helpline from an official page",
+             "A number traceable to a government source"),
+            ("women shelter home Lucknow", "maps",
+             "Identify somewhere to go if leaving becomes urgent",
+             "Shelter homes and their published contact details"),
+        ],
+    ),
+    DemoScenario(
+        id="stalking_ex",
+        title="An ex-partner who will not stop",
+        summary=(
+            "What stalking is under the Bharatiya Nyaya Sanhita, where the "
+            "women's police desk is, and how to report impersonation accounts."
+        ),
+        situation_text=(
+            "My ex keeps turning up where I am. He waits outside my office some "
+            "evenings and he has made two fake accounts to message me after I "
+            "blocked him. He has not hurt me but I have started changing my route "
+            "home and I do not sleep properly. People tell me it is not serious "
+            "enough to report. I want to know if it actually is, and what I can do."
+        ),
+        category="stalking",
+        location="Hyderabad, Telangana",
+        demonstrates=[
+            "Statutory definition retrieved, not recalled",
+            "Women's police desk located in the city",
+            "Reporting route for impersonation accounts",
+            "Recent reporting on local enforcement, with dates",
+        ],
+        expected_engines=["google", "google_maps", "google_news"],
+        urgency_hint="high",
+        fallback_searches=[
+            ("stalking section Bharatiya Nyaya Sanhita punishment", "web",
+             "Establish how stalking is defined and treated in law",
+             "The section, what it covers and the penalty"),
+            ("women police station Hyderabad", "maps",
+             "Find the women's police desk in the city",
+             "Addresses and contact numbers"),
+            ("cybercrime.gov.in fake account harassment", "web",
+             "Find the route for reporting impersonation accounts",
+             "The official portal and what reporting involves"),
+            ("Hyderabad SHE Teams stalking news", "news",
+             "See how this is being handled locally",
+             "Recent coverage of enforcement, with dates where available"),
+        ],
+    ),
+    DemoScenario(
+        id="fir_refused",
+        title="The police would not register my complaint",
+        summary=(
+            "Zero FIR, what to do when a station refuses, and where free legal "
+            "aid is available in the district."
+        ),
+        situation_text=(
+            "I went to the police station to file a complaint and they told me to "
+            "go to a different station because it did not happen in their area. I "
+            "went back the next day and they said they would look into it but did "
+            "not write anything down. I do not have money for a lawyer. I want to "
+            "know whether they are allowed to refuse and what I can do next."
+        ),
+        category="legal_information",
+        location="Jaipur, Rajasthan",
+        demonstrates=[
+            "Zero FIR explained from a source, with the link",
+            "Escalation route when a station refuses",
+            "Free legal aid eligibility under NALSA",
+            "District Legal Services Authority located",
+        ],
+        expected_engines=["google", "google_maps"],
+        urgency_hint="medium",
+        fallback_searches=[
+            ("Zero FIR police refuse to register complaint", "web",
+             "Establish whether a station may refuse and what Zero FIR means",
+             "The rule and where it comes from"),
+            ("district legal services authority Jaipur", "maps",
+             "Find where free legal aid is available locally",
+             "DLSA office address and contact"),
+            ("NALSA free legal aid women eligibility", "web",
+             "Check who qualifies for free legal aid",
+             "Eligibility criteria from an official page"),
+            ("SP complaint procedure refusal FIR", "web",
+             "Find the escalation route above the station",
+             "How to complain to a senior officer"),
+        ],
+    ),
+    DemoScenario(
+        id="campus_harassment",
+        title="Harassment at college",
+        summary=(
+            "UGC regulations on sexual harassment in higher education, the "
+            "internal committee route, and where a complaint goes."
+        ),
+        situation_text=(
+            "A faculty member in my department keeps asking me to stay back after "
+            "class and comments on how I dress. He is on the panel for my project "
+            "evaluation. Other girls have said similar things about him but nobody "
+            "wants to be the one to complain. I do not know who I would even go to, "
+            "or whether it would affect my marks."
+        ),
+        category="campus_safety",
+        location="Chennai, Tamil Nadu",
+        demonstrates=[
+            "UGC regulations retrieved from source",
+            "The internal committee route in a college",
+            "SHe-Box as an online reporting option",
+            "State helpline confirmed from an official page",
+        ],
+        expected_engines=["google", "google_maps"],
+        urgency_hint="medium",
+        fallback_searches=[
+            ("UGC regulations prevention of sexual harassment higher education", "web",
+             "Establish what a college is required to have in place",
+             "The regulations and the committee they mandate"),
+            ("SHe-Box complaint", "web",
+             "Find the online complaint route",
+             "The portal and what a complaint involves"),
+            ("women helpline Tamil Nadu official", "web",
+             "Confirm the state helpline from an official page",
+             "A number traceable to a government source"),
+            ("women police station Chennai Tamil Nadu", "maps",
+             "Locate the nearest women's police desk",
+             "An address and phone number that can be confirmed by calling"),
+        ],
+    ),
+    DemoScenario(
+        id="dowry_pressure",
+        title="Demands from my in-laws",
+        summary=(
+            "The Dowry Prohibition Act, family counselling options nearby, and "
+            "free legal aid in the district."
+        ),
+        situation_text=(
+            "My in-laws keep bringing up what my family did not give at the "
+            "wedding. It started as comments and now my mother-in-law says I "
+            "should ask my father for money for a car. My husband does not stop "
+            "her. My parents cannot afford it and I do not want to ask them. I "
+            "want to understand whether this is something I can act on."
+        ),
+        category="domestic_violence",
+        location="Patna, Bihar",
+        demonstrates=[
+            "The Dowry Prohibition Act 1961 retrieved from source",
+            "Family counselling centres located in the district",
+            "Free legal aid through the local DLSA",
+            "Recent reporting for context, clearly dated",
+        ],
+        expected_engines=["google", "google_maps", "google_news"],
+        urgency_hint="medium",
+        fallback_searches=[
+            ("Dowry Prohibition Act 1961", "web",
+             "Establish what the law says about dowry demands",
+             "The Act and what it prohibits"),
+            ("family counselling centre Patna women", "maps",
+             "Find counselling support locally",
+             "Centres and their published contact details"),
+            ("district legal services authority Patna", "maps",
+             "Find where free legal aid is available",
+             "DLSA office address and contact"),
+            ("dowry harassment cases Bihar news", "news",
+             "See how such cases are being reported locally",
+             "Recent coverage, with dates where available"),
+        ],
+    ),
+    DemoScenario(
+        id="new_city_housing",
+        title="Moving to a new city alone",
+        summary=(
+            "Working women's hostels, what has been reported about the city, and "
+            "the local police helpline — before committing to anything."
+        ),
+        situation_text=(
+            "I have a job offer in a city where I do not know anyone and I have to "
+            "decide in two weeks. I will be living alone for the first time. I want "
+            "to know what accommodation options exist for women, what the area is "
+            "like, and what I should set up before I move so that I am not working "
+            "it all out afterwards."
+        ),
+        category="safety_planning",
+        location="Bengaluru, Karnataka",
+        demonstrates=[
+            "Accommodation options surfaced with provenance",
+            "Recent local reporting, clearly dated",
+            "Police helpline confirmed from an official page",
+            "Planning support with nothing wrong yet",
+        ],
+        expected_engines=["google_maps", "google_news", "google"],
+        urgency_hint="low",
+        fallback_searches=[
+            ("working women hostel Bengaluru", "maps",
+             "Find accommodation intended for women living alone",
+             "Hostels and their published contact details"),
+            ("Bengaluru women safety news", "news",
+             "See what has recently been reported about the city",
+             "Recent coverage, with dates where available"),
+            ("Bengaluru police women helpline Suraksha", "web",
+             "Confirm the local police helpline from an official page",
+             "A number traceable to an official source"),
         ],
     ),
 ]

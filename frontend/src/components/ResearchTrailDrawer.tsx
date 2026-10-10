@@ -60,7 +60,7 @@ const ORIGIN_BADGE: Record<string, { label: string; className: string; title: st
   snapshot: {
     label: 'Snapshot',
     className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
-    title: 'A saved illustrative example — NOT a live search result',
+    title: 'A saved snapshot — NOT a live search result',
   },
   unavailable: {
     label: 'Unavailable',
@@ -104,7 +104,7 @@ export default function ResearchTrailDrawer({
         These search questions were written in advance, not chosen by an agent.
       </p>
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-        The research planner was unavailable, so this example used its prepared
+        The research planner was unavailable, so this case used its prepared
         questions. Everything below still ran live — the results, links and
         timestamps are real.
       </p>
